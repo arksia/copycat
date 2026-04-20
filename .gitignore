@@ -1,0 +1,30 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build outputs
+.output
+.wxt
+dist
+stats.html
+stats-*.json
+
+# Editor / OS
+.DS_Store
+Thumbs.db
+.idea
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Env / secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*

@@ -1,0 +1,23 @@
+{
+  "extends": "./.wxt/tsconfig.json",
+  "compilerOptions": {
+    "types": ["chrome"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "paths": {
+      "@/*": ["./*"],
+      "~/*": ["./*"]
+    }
+  },
+  "include": [
+    "entrypoints/**/*.ts",
+    "entrypoints/**/*.vue",
+    "components/**/*.ts",
+    "components/**/*.vue",
+    "composables/**/*.ts",
+    "utils/**/*.ts",
+    "types/**/*.ts",
+    ".wxt/wxt.d.ts"
+  ]
+}

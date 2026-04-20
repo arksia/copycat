@@ -1,0 +1,30 @@
+{
+  "name": "copycat",
+  "description": "Your portable project memory for any AI chat — a ghost-text autocomplete extension with your own RAG knowledge base.",
+  "version": "0.0.1",
+  "type": "module",
+  "scripts": {
+    "dev": "wxt",
+    "dev:firefox": "wxt -b firefox",
+    "build": "wxt build",
+    "build:firefox": "wxt build -b firefox",
+    "zip": "wxt zip",
+    "zip:firefox": "wxt zip -b firefox",
+    "compile": "vue-tsc --noEmit",
+    "postinstall": "wxt prepare"
+  },
+  "dependencies": {
+    "vue": "^3.5.13"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.287",
+    "@vitejs/plugin-vue": "^6.0.6",
+    "@wxt-dev/module-vue": "^1.0.2",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.5.1",
+    "tailwindcss": "^3.4.17",
+    "typescript": "^5.7.3",
+    "vue-tsc": "^2.2.0",
+    "wxt": "^0.20.0"
+  }
+}
