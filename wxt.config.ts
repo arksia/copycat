@@ -21,16 +21,6 @@ export default defineConfig({
       page: 'options.html',
       open_in_tab: true,
     },
-    commands: {
-      'accept-completion': {
-        suggested_key: { default: 'Tab' },
-        description: 'Accept the ghost-text completion',
-      },
-      'dismiss-completion': {
-        suggested_key: { default: 'Escape' },
-        description: 'Dismiss the ghost-text completion',
-      },
-    },
   },
   vite: () => ({
     css: {

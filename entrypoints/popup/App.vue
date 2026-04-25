@@ -41,6 +41,10 @@ async function toggleCurrentHost() {
 function openOptions() {
   chrome.runtime.openOptionsPage();
 }
+
+async function openPlayground() {
+  await chrome.tabs.create({ url: chrome.runtime.getURL('playground.html') });
+}
 </script>
 
 <template>
@@ -85,6 +89,7 @@ function openOptions() {
       </label>
 
       <button class="btn-primary w-full" @click="openOptions">Open settings</button>
+      <button class="btn-ghost w-full" @click="openPlayground">Open playground</button>
 
       <p v-if="!settings.apiKey && settings.provider !== 'ollama'" class="text-xs text-amber-600">
         No API key configured yet. Open settings to add one.

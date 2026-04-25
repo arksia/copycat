@@ -1,7 +1,12 @@
 import { debounce } from '~/utils/debounce';
 import { resolveEditor, type EditorHandle } from '~/utils/editor-adapter';
+import {
+  buildCompletionFingerprint,
+  buildCompletionSignalKey,
+} from '~/utils/completion-request';
 import { GhostTextOverlay } from '~/utils/ghost-text';
 import { nextId } from '~/utils/id';
+import { sendRuntimeMessage } from '~/utils/messages';
 import { isHostEnabled, loadSettings, onSettingsChanged } from '~/utils/settings';
 import type {
   CompletionRequest,
@@ -32,6 +37,7 @@ class CopycatController {
   private active: ActiveSuggestion | null = null;
   private composing = false;
   private lastRequestId: string | null = null;
+  private pendingFingerprint: string | null = null;
   private debouncedRequest: ReturnType<typeof debounce<() => void>>;
 
   constructor() {
@@ -205,11 +211,6 @@ class CopycatController {
       this.dismiss();
       return;
     }
-    // Only continue if caret is at a word-ending boundary (non-space/punct).
-    const tail = prefix.slice(-1);
-    if (!tail || /\s/.test(tail) === false) {
-      // Going with "after any character" is fine for chat; keep permissive.
-    }
     this.debouncedRequest();
   }
 
@@ -217,23 +218,38 @@ class CopycatController {
     if (!this.settings || !this.activeEditor) return;
     const editor = this.activeEditor;
     const prefix = editor.getPrefix();
-    if (prefix.trim().length < this.settings.minPrefixChars) return;
+    if (prefix.trim().length < this.settings.minPrefixChars) {
+      this.pendingFingerprint = null;
+      this.lastRequestId = null;
+      return;
+    }
+    const suffix = editor.getSuffix();
+    const fingerprint = buildCompletionFingerprint({
+      host: location.host,
+      editorKind: editor.kind,
+      prefix,
+      suffix,
+    });
+    if (fingerprint === this.pendingFingerprint) return;
 
     const id = nextId('req');
     this.lastRequestId = id;
+    this.pendingFingerprint = fingerprint;
 
     const req: CompletionRequest = {
       id,
       prefix,
-      suffix: editor.getSuffix(),
+      suffix,
+      signalKey: buildCompletionSignalKey(location.host, editor.kind),
     };
 
     try {
-      const res = await sendMessage<CompletionResponse>({
+      const res = await sendRuntimeMessage<CompletionResponse>({
         type: 'completion/request',
         payload: req,
       });
       if (this.lastRequestId !== id) return;
+      this.pendingFingerprint = null;
       if (!res || !res.completion) return;
       if (editor !== this.activeEditor) return;
       if (editor.getPrefix() !== prefix) return;
@@ -241,7 +257,13 @@ class CopycatController {
       this.active = { id, editor, prefix, suggestion: res.completion };
       this.overlay.show(editor, res.completion);
     } catch (err) {
-      console.warn('[copycat] completion error:', err);
+      if (this.lastRequestId === id) {
+        this.pendingFingerprint = null;
+        this.lastRequestId = null;
+      }
+      if (!(err instanceof Error && /abort/i.test(err.message))) {
+        console.warn('[copycat] completion error:', err);
+      }
     }
   }
 
@@ -255,29 +277,14 @@ class CopycatController {
 
   private dismiss() {
     if (this.lastRequestId) {
-      sendMessage({ type: 'completion/cancel', payload: { id: this.lastRequestId } }).catch(
+      sendRuntimeMessage({ type: 'completion/cancel', payload: { id: this.lastRequestId } }).catch(
         () => {},
       );
       this.lastRequestId = null;
     }
+    this.pendingFingerprint = null;
     this.debouncedRequest.cancel();
     if (this.active) this.active = null;
     this.overlay.hide();
   }
-}
-
-function sendMessage<T = unknown>(msg: unknown): Promise<T> {
-  return new Promise((resolve, reject) => {
-    try {
-      chrome.runtime.sendMessage(msg, (response: { ok: boolean; data?: T; error?: any }) => {
-        const err = chrome.runtime.lastError;
-        if (err) return reject(new Error(err.message));
-        if (!response) return resolve(undefined as T);
-        if (response.ok) return resolve(response.data as T);
-        reject(new Error(response.error?.error ?? 'Unknown error'));
-      });
-    } catch (e) {
-      reject(e);
-    }
-  });
 }

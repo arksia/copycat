@@ -36,8 +36,8 @@ export const PROVIDER_PRESETS: Record<ProviderId, ProviderPreset> = {
   custom: {
     id: 'custom',
     name: 'Custom (OpenAI-compatible)',
-    baseUrl: '',
-    defaultModel: '',
+    baseUrl: 'https://llm.yunhaoli.top/v1',
+    defaultModel: 'free',
     requiresKey: false,
   },
 };
@@ -49,3 +49,7 @@ export const PROVIDER_ORDER: ProviderId[] = [
   'ollama',
   'custom',
 ];
+
+export function resolveProviderPreset(providerId: ProviderId): ProviderPreset {
+  return PROVIDER_PRESETS[providerId] ?? PROVIDER_PRESETS.custom;
+}

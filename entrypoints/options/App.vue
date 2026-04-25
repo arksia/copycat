@@ -1,7 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue';
+import { buildModelsUrl, parseModelListResponse, type DiscoveredModel } from '~/utils/model-discovery';
+import {
+  buildOpenAICompatibleHeaders,
+  extractAssistantMessageContent,
+  joinOpenAICompatibleUrl,
+} from '~/utils/openai-compatible';
 import { DEFAULT_SETTINGS, DEFAULT_SYSTEM_PROMPT, loadSettings, saveSettings } from '~/utils/settings';
-import { PROVIDER_ORDER, PROVIDER_PRESETS } from '~/utils/providers';
+import { PROVIDER_ORDER, PROVIDER_PRESETS, resolveProviderPreset } from '~/utils/providers';
 import type { ProviderId, Settings } from '~/types';
 
 const settings = ref<Settings>({ ...DEFAULT_SETTINGS });
@@ -10,23 +16,37 @@ const saving = ref(false);
 const toast = ref<{ kind: 'ok' | 'err'; text: string } | null>(null);
 const testingConnection = ref(false);
 const connectionResult = ref<{ ok: boolean; message: string } | null>(null);
+const fetchingModels = ref(false);
+const modelsError = ref('');
+const discoveredModels = ref<DiscoveredModel[]>([]);
+const loadError = ref('');
 
 const hostsText = ref('');
 
-const provider = computed(() => PROVIDER_PRESETS[settings.value.provider]);
+const provider = computed(
+  () => resolveProviderPreset(settings.value.provider),
+);
 
 onMounted(async () => {
-  const s = await loadSettings();
-  settings.value = s;
-  hostsText.value = s.enabledHosts.join('\n');
-  loaded.value = true;
+  try {
+    const s = await loadSettings();
+    settings.value = s;
+    hostsText.value = s.enabledHosts.join('\n');
+  } catch (e) {
+    loadError.value =
+      e instanceof Error ? e.message : 'Failed to load settings. Defaults are shown instead.';
+    settings.value = { ...DEFAULT_SETTINGS };
+    hostsText.value = DEFAULT_SETTINGS.enabledHosts.join('\n');
+  } finally {
+    loaded.value = true;
+  }
 });
 
 watch(
   () => settings.value.provider,
   (id: ProviderId, prev) => {
     if (!loaded.value || id === prev) return;
-    const preset = PROVIDER_PRESETS[id];
+    const preset = resolveProviderPreset(id);
     if (preset.baseUrl) settings.value.baseUrl = preset.baseUrl;
     if (preset.defaultModel) settings.value.model = preset.defaultModel;
   },
@@ -64,10 +84,8 @@ async function testConnection() {
   testingConnection.value = true;
   connectionResult.value = null;
   try {
-    const base = settings.value.baseUrl.replace(/\/+$/, '');
-    const url = `${base}/chat/completions`;
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (settings.value.apiKey) headers['Authorization'] = `Bearer ${settings.value.apiKey}`;
+    const url = joinOpenAICompatibleUrl(settings.value.baseUrl, '/chat/completions');
+    const headers = buildOpenAICompatibleHeaders(settings.value.apiKey);
     const res = await fetch(url, {
       method: 'POST',
       headers,
@@ -90,7 +108,7 @@ async function testConnection() {
       return;
     }
     const data = await res.json();
-    const reply = data?.choices?.[0]?.message?.content ?? '(empty)';
+    const reply = extractAssistantMessageContent(data) || '(empty)';
     connectionResult.value = { ok: true, message: `Connected — reply: ${reply}` };
   } catch (e) {
     connectionResult.value = {
@@ -100,6 +118,42 @@ async function testConnection() {
   } finally {
     testingConnection.value = false;
   }
+}
+
+async function fetchModels() {
+  fetchingModels.value = true;
+  modelsError.value = '';
+  discoveredModels.value = [];
+
+  try {
+    const url = buildModelsUrl(settings.value.baseUrl);
+    const headers = buildOpenAICompatibleHeaders(settings.value.apiKey);
+    const res = await fetch(url, {
+      method: 'GET',
+      headers,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      modelsError.value = `HTTP ${res.status}: ${text.slice(0, 180)}`;
+      return;
+    }
+
+    const data = await res.json();
+    const models = parseModelListResponse(data);
+    if (models.length === 0) {
+      modelsError.value = 'No models were returned by this host.';
+      return;
+    }
+    discoveredModels.value = models;
+  } catch (e) {
+    modelsError.value = e instanceof Error ? e.message : String(e);
+  } finally {
+    fetchingModels.value = false;
+  }
+}
+
+function useDiscoveredModel(modelId: string) {
+  settings.value.model = modelId;
 }
 
 function showToast(kind: 'ok' | 'err', text: string) {
@@ -139,6 +193,13 @@ function showToast(kind: 'ok' | 'err', text: string) {
     </header>
 
     <template v-if="loaded">
+      <section v-if="loadError" class="card mb-6 border-rose-200 bg-rose-50">
+        <h2 class="mb-2 text-base font-semibold text-rose-700">Settings load warning</h2>
+        <p class="text-sm text-rose-700">
+          {{ loadError }}
+        </p>
+      </section>
+
       <section class="card mb-6">
         <h2 class="mb-4 text-base font-semibold">Inference backend</h2>
 
@@ -190,6 +251,9 @@ function showToast(kind: 'ok' | 'err', text: string) {
           <button class="btn-ghost" :disabled="testingConnection" @click="testConnection">
             {{ testingConnection ? 'Testing…' : 'Test connection' }}
           </button>
+          <button class="btn-ghost" :disabled="fetchingModels" @click="fetchModels">
+            {{ fetchingModels ? 'Fetching…' : 'Fetch models' }}
+          </button>
           <p
             v-if="connectionResult"
             class="text-sm"
@@ -197,6 +261,41 @@ function showToast(kind: 'ok' | 'err', text: string) {
           >
             {{ connectionResult.message }}
           </p>
+        </div>
+
+        <div class="mt-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
+          <div class="mb-2 flex items-center justify-between">
+            <h3 class="text-sm font-semibold text-neutral-800">Available models</h3>
+            <span class="text-xs text-neutral-500">Uses the current base URL and API key</span>
+          </div>
+
+          <p v-if="modelsError" class="text-sm text-rose-600">
+            {{ modelsError }}
+          </p>
+
+          <p v-else-if="fetchingModels" class="text-sm text-neutral-500">
+            Fetching model list…
+          </p>
+
+          <p v-else-if="discoveredModels.length === 0" class="text-sm text-neutral-500">
+            Click <span class="font-medium">Fetch models</span> to inspect the current host.
+          </p>
+
+          <ul v-else class="space-y-2">
+            <li
+              v-for="model in discoveredModels"
+              :key="model.id"
+              class="flex items-center justify-between gap-3 rounded-md border border-neutral-200 bg-white px-3 py-2"
+            >
+              <div class="min-w-0">
+                <div class="truncate font-mono text-sm text-neutral-800">{{ model.id }}</div>
+                <div v-if="model.ownedBy" class="text-xs text-neutral-500">
+                  owned by {{ model.ownedBy }}
+                </div>
+              </div>
+              <button class="btn-ghost shrink-0" @click="useDiscoveredModel(model.id)">Use</button>
+            </li>
+          </ul>
         </div>
       </section>
 
@@ -230,7 +329,7 @@ function showToast(kind: 'ok' | 'err', text: string) {
               v-model.number="settings.maxTokens"
               type="number"
               min="4"
-              max="256"
+              max="1024"
               class="input"
             />
           </div>
@@ -245,6 +344,14 @@ function showToast(kind: 'ok' | 'err', text: string) {
               class="input"
             />
           </div>
+          <label class="flex items-center gap-3 rounded-md border border-neutral-200 px-3 py-2 text-sm md:col-span-2">
+            <input
+              v-model="settings.disableThinking"
+              type="checkbox"
+              class="h-4 w-4 rounded border-neutral-300 text-brand-600"
+            />
+            <span>Disable thinking when supported</span>
+          </label>
         </div>
 
         <div class="mt-4">

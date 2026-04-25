@@ -19,6 +19,7 @@ export interface Settings {
   maxTokens: number;
   debounceMs: number;
   minPrefixChars: number;
+  disableThinking: boolean;
   systemPrompt: string;
   enabledHosts: string[];
   disabledHosts: string[];
@@ -30,6 +31,26 @@ export interface CompletionRequest {
   suffix?: string;
   context?: string;
   signalKey?: string;
+  debug?: boolean;
+}
+
+export interface CompletionDebugInfo {
+  rawCompletion: string;
+  sanitizedCompletion: string;
+  rawChoice: string;
+  cacheHit: boolean;
+  disableThinkingRequested: boolean;
+  thinkingControlsFallback: boolean;
+  requestBody: {
+    systemPrompt: string;
+    userPrompt: string;
+    reasoning?: {
+      enabled: boolean;
+    };
+    thinking?: {
+      type: string;
+    };
+  };
 }
 
 export interface CompletionResponse {
@@ -38,6 +59,7 @@ export interface CompletionResponse {
   latencyMs: number;
   provider: ProviderId;
   model: string;
+  debug?: CompletionDebugInfo;
 }
 
 export interface CompletionError {
@@ -45,6 +67,18 @@ export interface CompletionError {
   error: string;
   code?: string;
 }
+
+export interface RuntimeFailure {
+  ok: false;
+  error?: CompletionError | { error?: string };
+}
+
+export interface RuntimeSuccess<T> {
+  ok: true;
+  data?: T;
+}
+
+export type RuntimeResponse<T> = RuntimeSuccess<T> | RuntimeFailure;
 
 export type RuntimeMessage =
   | { type: 'completion/request'; payload: CompletionRequest }

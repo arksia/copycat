@@ -1,12 +1,9 @@
 /**
  * Editor adapters abstract the quirks of different input surfaces.
- * Phase 0 ships two adapters:
- *   - TextareaAdapter: plain <textarea> / <input type=text|search|url|email>
- *   - ContentEditableAdapter: contenteditable=true divs (Gemini, most lightweight editors)
  *
- * ProseMirror (ChatGPT, Claude) is deferred to Phase 1 — it requires a custom
- * CSS Custom Highlight API approach because mutating the DOM directly is
- * reverted by ProseMirror's internal state.
+ * M1 explicitly optimizes around native text inputs. The resolver registry
+ * keeps room for future adapters such as ProseMirror or richer
+ * contenteditable-specific rendering without changing the content script flow.
  */
 
 export type EditorKind = 'textarea' | 'input' | 'contenteditable';
@@ -28,20 +25,59 @@ export interface EditorHandle {
   isEmpty(): boolean;
 }
 
+export interface EditorResolver {
+  name: string;
+  supports(target: EventTarget | null): boolean;
+  resolve(target: EventTarget | null): EditorHandle | null;
+}
+
 export function resolveEditor(target: EventTarget | null): EditorHandle | null {
-  if (!(target instanceof HTMLElement)) return null;
-  if (target instanceof HTMLTextAreaElement) {
-    return new TextareaAdapter(target);
-  }
-  if (target instanceof HTMLInputElement && isTextualInput(target)) {
-    return new TextareaAdapter(target);
-  }
-  if (target.isContentEditable) {
-    const host = findContentEditableHost(target);
-    if (host) return new ContentEditableAdapter(host);
+  for (const resolver of EDITOR_RESOLVERS) {
+    if (!resolver.supports(target)) continue;
+    const handle = resolver.resolve(target);
+    if (handle) return handle;
   }
   return null;
 }
+
+export const EDITOR_RESOLVERS: readonly EditorResolver[] = [
+  {
+    name: 'native-text',
+    supports(target) {
+      return (
+        target instanceof HTMLTextAreaElement ||
+        (target instanceof HTMLInputElement && isTextualInput(target))
+      );
+    },
+    resolve(target) {
+      if (target instanceof HTMLTextAreaElement) {
+        return new TextareaAdapter(target);
+      }
+      if (target instanceof HTMLInputElement && isTextualInput(target)) {
+        return new TextareaAdapter(target);
+      }
+      return null;
+    },
+  },
+] as const;
+
+// Keep future adapters explicit, but do not activate them in M1. The current
+// milestone is focused on making native text inputs reliable first.
+export const FUTURE_EDITOR_RESOLVERS: readonly EditorResolver[] = [
+  {
+    name: 'contenteditable',
+    supports(target) {
+      return target instanceof HTMLElement && target.isContentEditable;
+    },
+    resolve(target) {
+      if (!(target instanceof HTMLElement) || !target.isContentEditable) {
+        return null;
+      }
+      const host = findContentEditableHost(target);
+      return host ? new ContentEditableAdapter(host) : null;
+    },
+  },
+] as const;
 
 function isTextualInput(el: HTMLInputElement): boolean {
   const t = (el.type || 'text').toLowerCase();

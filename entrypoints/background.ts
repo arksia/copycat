@@ -1,4 +1,8 @@
-import { completeOnce } from '~/utils/llm';
+import {
+  CompletionMemoryCache,
+  buildCompletionCacheKey,
+} from '~/utils/completion-cache';
+import { completeOnce, completeOnceDetailed } from '~/utils/llm';
 import { loadSettings, saveSettings } from '~/utils/settings';
 import type {
   CompletionRequest,
@@ -9,6 +13,8 @@ import type {
 
 export default defineBackground(() => {
   const inFlight = new Map<string, AbortController>();
+  const requestSignalKeys = new Map<string, string>();
+  const completionCache = new CompletionMemoryCache();
 
   chrome.runtime.onInstalled.addListener((details) => {
     if (details.reason === 'install') {
@@ -49,7 +55,11 @@ export default defineBackground(() => {
   });
 
   async function handleCompletion(req: CompletionRequest): Promise<CompletionResponse> {
-    cancel(req.id);
+    if (req.signalKey) {
+      cancelBySignalKey(req.signalKey);
+    } else {
+      cancel(req.id);
+    }
 
     const settings = await loadSettings();
     if (!settings.enabled) {
@@ -59,27 +69,69 @@ export default defineBackground(() => {
       throw new Error('Missing base URL. Please open the options page to configure Copycat.');
     }
 
+    const cacheKey = buildCompletionCacheKey({
+      provider: settings.provider,
+      model: settings.model,
+      prefix: req.prefix,
+      suffix: req.suffix,
+      context: req.context,
+    });
+    const cached = completionCache.get(cacheKey);
+    if (cached !== null && !req.debug) {
+      return {
+        id: req.id,
+        completion: cached,
+        latencyMs: 0,
+        provider: settings.provider,
+        model: settings.model,
+      };
+    }
+
     const controller = new AbortController();
     inFlight.set(req.id, controller);
+    if (req.signalKey) {
+      requestSignalKeys.set(req.signalKey, req.id);
+    }
 
     const start = performance.now();
     try {
-      const completion = await completeOnce({
-        prefix: req.prefix,
-        suffix: req.suffix,
-        context: req.context,
-        settings,
-        signal: controller.signal,
-      });
+      const detailed = req.debug
+        ? await completeOnceDetailed({
+            prefix: req.prefix,
+            suffix: req.suffix,
+            context: req.context,
+            settings,
+            signal: controller.signal,
+          })
+        : {
+            completion: await completeOnce({
+              prefix: req.prefix,
+              suffix: req.suffix,
+              context: req.context,
+              settings,
+              signal: controller.signal,
+            }),
+            debug: undefined,
+          };
+      const completion = detailed.completion;
+      if (completion) {
+        completionCache.set(cacheKey, completion);
+      }
       return {
         id: req.id,
         completion,
         latencyMs: Math.round(performance.now() - start),
         provider: settings.provider,
         model: settings.model,
+        debug: detailed.debug,
       };
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError') {
+        return emptyResponse(req.id, settings.provider, settings.model);
+      }
+      throw error;
     } finally {
-      inFlight.delete(req.id);
+      clearRequest(req.id, req.signalKey);
     }
   }
 
@@ -87,7 +139,29 @@ export default defineBackground(() => {
     const ctrl = inFlight.get(id);
     if (ctrl) {
       ctrl.abort();
-      inFlight.delete(id);
+    }
+    clearRequest(id);
+  }
+
+  function cancelBySignalKey(signalKey: string) {
+    const requestId = requestSignalKeys.get(signalKey);
+    if (!requestId) return;
+    cancel(requestId);
+  }
+
+  function clearRequest(id: string, signalKey?: string) {
+    inFlight.delete(id);
+    if (signalKey) {
+      const activeId = requestSignalKeys.get(signalKey);
+      if (activeId === id) {
+        requestSignalKeys.delete(signalKey);
+      }
+      return;
+    }
+    for (const [key, value] of requestSignalKeys.entries()) {
+      if (value === id) {
+        requestSignalKeys.delete(key);
+      }
     }
   }
 
