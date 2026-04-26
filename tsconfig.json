@@ -1,14 +1,14 @@
 {
   "extends": "./.wxt/tsconfig.json",
   "compilerOptions": {
-    "types": ["chrome"],
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
     "paths": {
       "@/*": ["./*"],
       "~/*": ["./*"]
-    }
+    },
+    "types": ["chrome"],
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true
   },
   "include": [
     "entrypoints/**/*.ts",
@@ -19,6 +19,8 @@
     "utils/**/*.ts",
     "types/**/*.ts",
     "tests/**/*.ts",
-    ".wxt/wxt.d.ts"
+    ".wxt/wxt.d.ts",
+    "vitest.config.ts",
+    "wxt.config.ts"
   ]
 }

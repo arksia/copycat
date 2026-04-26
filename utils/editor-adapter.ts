@@ -6,38 +6,29 @@
  * contenteditable-specific rendering without changing the content script flow.
  */
 
-export type EditorKind = 'textarea' | 'input' | 'contenteditable';
+export type EditorKind = 'textarea' | 'input' | 'contenteditable'
 
 export interface EditorHandle {
-  kind: EditorKind;
-  el: HTMLElement;
+  kind: EditorKind
+  el: HTMLElement
   /** Text before the caret (excluding any suggestion we have inserted). */
-  getPrefix(): string;
+  getPrefix: () => string
   /** Text after the caret. */
-  getSuffix(): string;
+  getSuffix: () => string
   /** Absolute viewport coordinates of the caret (top-left of a zero-width box). */
-  getCaretRect(): DOMRect | null;
+  getCaretRect: () => DOMRect | null
   /** Insert text at the caret and advance the caret past it. */
-  insertAtCaret(text: string): void;
+  insertAtCaret: (text: string) => void
   /** Force focus back on the editor. */
-  focus(): void;
+  focus: () => void
   /** Whether the editor is currently empty. */
-  isEmpty(): boolean;
+  isEmpty: () => boolean
 }
 
 export interface EditorResolver {
-  name: string;
-  supports(target: EventTarget | null): boolean;
-  resolve(target: EventTarget | null): EditorHandle | null;
-}
-
-export function resolveEditor(target: EventTarget | null): EditorHandle | null {
-  for (const resolver of EDITOR_RESOLVERS) {
-    if (!resolver.supports(target)) continue;
-    const handle = resolver.resolve(target);
-    if (handle) return handle;
-  }
-  return null;
+  name: string
+  supports: (target: EventTarget | null) => boolean
+  resolve: (target: EventTarget | null) => EditorHandle | null
 }
 
 export const EDITOR_RESOLVERS: readonly EditorResolver[] = [
@@ -45,21 +36,32 @@ export const EDITOR_RESOLVERS: readonly EditorResolver[] = [
     name: 'native-text',
     supports(target) {
       return (
-        target instanceof HTMLTextAreaElement ||
-        (target instanceof HTMLInputElement && isTextualInput(target))
-      );
+        target instanceof HTMLTextAreaElement
+        || (target instanceof HTMLInputElement && isTextualInput(target))
+      )
     },
     resolve(target) {
       if (target instanceof HTMLTextAreaElement) {
-        return new TextareaAdapter(target);
+        return new TextareaAdapter(target)
       }
       if (target instanceof HTMLInputElement && isTextualInput(target)) {
-        return new TextareaAdapter(target);
+        return new TextareaAdapter(target)
       }
-      return null;
+      return null
     },
   },
-] as const;
+] as const
+
+export function resolveEditor(target: EventTarget | null): EditorHandle | null {
+  for (const resolver of EDITOR_RESOLVERS) {
+    if (!resolver.supports(target))
+      continue
+    const handle = resolver.resolve(target)
+    if (handle)
+      return handle
+  }
+  return null
+}
 
 // Keep future adapters explicit, but do not activate them in M1. The current
 // milestone is focused on making native text inputs reliable first.
@@ -67,30 +69,31 @@ export const FUTURE_EDITOR_RESOLVERS: readonly EditorResolver[] = [
   {
     name: 'contenteditable',
     supports(target) {
-      return target instanceof HTMLElement && target.isContentEditable;
+      return target instanceof HTMLElement && target.isContentEditable
     },
     resolve(target) {
       if (!(target instanceof HTMLElement) || !target.isContentEditable) {
-        return null;
+        return null
       }
-      const host = findContentEditableHost(target);
-      return host ? new ContentEditableAdapter(host) : null;
+      const host = findContentEditableHost(target)
+      return host ? new ContentEditableAdapter(host) : null
     },
   },
-] as const;
+] as const
 
 function isTextualInput(el: HTMLInputElement): boolean {
-  const t = (el.type || 'text').toLowerCase();
-  return ['text', 'search', 'url', 'email', 'tel'].includes(t);
+  const t = (el.type || 'text').toLowerCase()
+  return ['text', 'search', 'url', 'email', 'tel'].includes(t)
 }
 
 function findContentEditableHost(start: HTMLElement): HTMLElement | null {
-  let el: HTMLElement | null = start;
+  let el: HTMLElement | null = start
   while (el) {
-    if (el.getAttribute?.('contenteditable') === 'true') return el;
-    el = el.parentElement;
+    if (el.getAttribute?.('contenteditable') === 'true')
+      return el
+    el = el.parentElement
   }
-  return null;
+  return null
 }
 
 // ---------------------------------------------------------------------------
@@ -98,165 +101,184 @@ function findContentEditableHost(start: HTMLElement): HTMLElement | null {
 // ---------------------------------------------------------------------------
 
 class TextareaAdapter implements EditorHandle {
-  readonly kind: EditorKind;
-  readonly el: HTMLTextAreaElement | HTMLInputElement;
+  readonly kind: EditorKind
+  readonly el: HTMLTextAreaElement | HTMLInputElement
 
   constructor(el: HTMLTextAreaElement | HTMLInputElement) {
-    this.el = el;
-    this.kind = el instanceof HTMLTextAreaElement ? 'textarea' : 'input';
+    this.el = el
+    this.kind = el instanceof HTMLTextAreaElement ? 'textarea' : 'input'
   }
 
   getPrefix(): string {
-    const value = this.el.value;
-    const pos = this.el.selectionStart ?? value.length;
-    return value.slice(0, pos);
+    const value = this.el.value
+    const pos = this.el.selectionStart ?? value.length
+    return value.slice(0, pos)
   }
 
   getSuffix(): string {
-    const value = this.el.value;
-    const pos = this.el.selectionEnd ?? value.length;
-    return value.slice(pos);
+    const value = this.el.value
+    const pos = this.el.selectionEnd ?? value.length
+    return value.slice(pos)
   }
 
   getCaretRect(): DOMRect | null {
-    return measureTextareaCaret(this.el);
+    return measureTextareaCaret(this.el)
   }
 
   insertAtCaret(text: string): void {
-    const el = this.el;
-    const start = el.selectionStart ?? el.value.length;
-    const end = el.selectionEnd ?? el.value.length;
-    const before = el.value.slice(0, start);
-    const after = el.value.slice(end);
+    const el = this.el
+    const start = el.selectionStart ?? el.value.length
+    const end = el.selectionEnd ?? el.value.length
+    const before = el.value.slice(0, start)
+    const after = el.value.slice(end)
 
     // Use the standard setter so framework listeners (React, Vue) pick up the change.
-    const setter = getNativeValueSetter(el);
-    const next = before + text + after;
-    setter(el, next);
-    el.dispatchEvent(new Event('input', { bubbles: true }));
-    const caret = start + text.length;
+    const setter = getNativeValueSetter(el)
+    const next = before + text + after
+    setter(el, next)
+    el.dispatchEvent(new Event('input', { bubbles: true }))
+    const caret = start + text.length
     try {
-      el.setSelectionRange(caret, caret);
-    } catch {
+      el.setSelectionRange(caret, caret)
+    }
+    catch {
       // <input type="email"> etc. throw when calling setSelectionRange. Ignore.
     }
   }
 
   focus(): void {
-    this.el.focus();
+    this.el.focus()
   }
 
   isEmpty(): boolean {
-    return !this.el.value;
+    return !this.el.value
   }
 }
 
-type NativeSetter = (el: HTMLInputElement | HTMLTextAreaElement, value: string) => void;
+type NativeSetter = (el: HTMLInputElement | HTMLTextAreaElement, value: string) => void
 
-const cachedSetters = new WeakMap<Function, NativeSetter>();
+interface ValueSetterHost {
+  constructor: object
+}
+
+const cachedSetters = new WeakMap<object, NativeSetter>()
 
 function getNativeValueSetter(
   el: HTMLInputElement | HTMLTextAreaElement,
 ): NativeSetter {
-  const proto = Object.getPrototypeOf(el);
-  const ctor = proto.constructor;
-  const existing = cachedSetters.get(ctor);
-  if (existing) return existing;
-  const descriptor = Object.getOwnPropertyDescriptor(proto, 'value');
-  const setter: NativeSetter = descriptor?.set
-    ? (node, value) => descriptor.set!.call(node, value)
-    : (node, value) => {
-        (node as any).value = value;
-      };
-  cachedSetters.set(ctor, setter);
-  return setter;
+  const proto = Object.getPrototypeOf(el) as ValueSetterHost
+  const ctor = proto.constructor
+  const existing = cachedSetters.get(ctor)
+  if (existing)
+    return existing
+  const descriptor = Object.getOwnPropertyDescriptor(proto, 'value')
+  // NOTICE:
+  // We intentionally access the prototype `value` setter so framework-managed
+  // inputs still observe native value updates through the real DOM setter.
+  // `ts/unbound-method` treats `PropertyDescriptor#set` like a detached method,
+  // but we invoke it immediately with `Reflect.apply`, so the receiver is explicit.
+  // Source/context: `utils/editor-adapter.ts#getNativeValueSetter`.
+  // Removal condition: remove once the typed lint rule handles property-descriptor
+  // setters without this false positive.
+  // eslint-disable-next-line ts/unbound-method
+  const rawSetter = descriptor?.set
+  const setter: NativeSetter
+    = typeof rawSetter === 'function'
+      ? (node, value) => {
+          Reflect.apply(rawSetter, node, [value])
+        }
+      : (node, value) => {
+          node.value = value
+        }
+  cachedSetters.set(ctor, setter)
+  return setter
 }
 
 // Mirror-div trick to measure caret position inside a textarea/input.
 // This is the approach used by ace, Draft, Grammarly etc.
-let mirrorDiv: HTMLDivElement | null = null;
+let mirrorDiv: HTMLDivElement | null = null
 
 const MIRROR_COPY_PROPS = [
-  'boxSizing',
+  'box-sizing',
   'width',
   'height',
-  'overflowX',
-  'overflowY',
-  'borderTopWidth',
-  'borderRightWidth',
-  'borderBottomWidth',
-  'borderLeftWidth',
-  'borderStyle',
-  'paddingTop',
-  'paddingRight',
-  'paddingBottom',
-  'paddingLeft',
-  'fontStyle',
-  'fontVariant',
-  'fontWeight',
-  'fontStretch',
-  'fontSize',
-  'fontSizeAdjust',
-  'lineHeight',
-  'fontFamily',
-  'textAlign',
-  'textTransform',
-  'textIndent',
-  'textDecoration',
-  'letterSpacing',
-  'wordSpacing',
-  'tabSize',
-  'whiteSpace',
-  'wordBreak',
-  'overflowWrap',
-] as const;
+  'overflow-x',
+  'overflow-y',
+  'border-top-width',
+  'border-right-width',
+  'border-bottom-width',
+  'border-left-width',
+  'border-style',
+  'padding-top',
+  'padding-right',
+  'padding-bottom',
+  'padding-left',
+  'font-style',
+  'font-variant',
+  'font-weight',
+  'font-stretch',
+  'font-size',
+  'font-size-adjust',
+  'line-height',
+  'font-family',
+  'text-align',
+  'text-transform',
+  'text-indent',
+  'text-decoration',
+  'letter-spacing',
+  'word-spacing',
+  'tab-size',
+  'white-space',
+  'word-break',
+  'overflow-wrap',
+] as const
 
 function measureTextareaCaret(
   el: HTMLTextAreaElement | HTMLInputElement,
 ): DOMRect | null {
-  const value = el.value;
-  const pos = el.selectionStart ?? value.length;
+  const value = el.value
+  const pos = el.selectionStart ?? value.length
 
   if (!mirrorDiv) {
-    mirrorDiv = document.createElement('div');
-    mirrorDiv.setAttribute('data-copycat-mirror', '');
-    mirrorDiv.style.position = 'absolute';
-    mirrorDiv.style.top = '0';
-    mirrorDiv.style.left = '-9999px';
-    mirrorDiv.style.visibility = 'hidden';
-    mirrorDiv.style.pointerEvents = 'none';
-    mirrorDiv.style.zIndex = '-1';
-    document.body.appendChild(mirrorDiv);
+    mirrorDiv = document.createElement('div')
+    mirrorDiv.setAttribute('data-copycat-mirror', '')
+    mirrorDiv.style.position = 'absolute'
+    mirrorDiv.style.top = '0'
+    mirrorDiv.style.left = '-9999px'
+    mirrorDiv.style.visibility = 'hidden'
+    mirrorDiv.style.pointerEvents = 'none'
+    mirrorDiv.style.zIndex = '-1'
+    document.body.appendChild(mirrorDiv)
   }
 
-  const computed = window.getComputedStyle(el);
-  const isInput = el instanceof HTMLInputElement;
+  const computed = window.getComputedStyle(el)
+  const isInput = el instanceof HTMLInputElement
   for (const prop of MIRROR_COPY_PROPS) {
-    (mirrorDiv.style as any)[prop] = computed[prop as any];
+    mirrorDiv.style.setProperty(prop, computed.getPropertyValue(prop))
   }
-  mirrorDiv.style.whiteSpace = isInput ? 'pre' : 'pre-wrap';
-  mirrorDiv.style.wordWrap = 'break-word';
-  mirrorDiv.style.position = 'absolute';
+  mirrorDiv.style.whiteSpace = isInput ? 'pre' : 'pre-wrap'
+  mirrorDiv.style.wordWrap = 'break-word'
+  mirrorDiv.style.position = 'absolute'
 
-  mirrorDiv.textContent = value.slice(0, pos);
-  const marker = document.createElement('span');
-  marker.textContent = value.slice(pos) || '\u200b';
-  mirrorDiv.appendChild(marker);
+  mirrorDiv.textContent = value.slice(0, pos)
+  const marker = document.createElement('span')
+  marker.textContent = value.slice(pos) || '\u200B'
+  mirrorDiv.appendChild(marker)
 
-  const rectElement = el.getBoundingClientRect();
-  const markerRect = marker.getBoundingClientRect();
-  const mirrorRect = mirrorDiv.getBoundingClientRect();
+  const rectElement = el.getBoundingClientRect()
+  const markerRect = marker.getBoundingClientRect()
+  const mirrorRect = mirrorDiv.getBoundingClientRect()
 
-  const x =
-    rectElement.left +
-    (markerRect.left - mirrorRect.left) -
-    el.scrollLeft;
-  const y =
-    rectElement.top +
-    (markerRect.top - mirrorRect.top) -
-    el.scrollTop;
+  const x
+    = rectElement.left
+      + (markerRect.left - mirrorRect.left)
+      - el.scrollLeft
+  const y
+    = rectElement.top
+      + (markerRect.top - mirrorRect.top)
+      - el.scrollTop
 
-  return new DOMRect(x, y, 0, markerRect.height || parseFloat(computed.lineHeight) || 18);
+  return new DOMRect(x, y, 0, markerRect.height || Number.parseFloat(computed.lineHeight) || 18)
 }
 
 // ---------------------------------------------------------------------------
@@ -264,97 +286,104 @@ function measureTextareaCaret(
 // ---------------------------------------------------------------------------
 
 class ContentEditableAdapter implements EditorHandle {
-  readonly kind: EditorKind = 'contenteditable';
-  readonly el: HTMLElement;
+  readonly kind: EditorKind = 'contenteditable'
+  readonly el: HTMLElement
 
   constructor(el: HTMLElement) {
-    this.el = el;
+    this.el = el
   }
 
   private currentRange(): Range | null {
-    const sel = window.getSelection();
-    if (!sel || sel.rangeCount === 0) return null;
-    const range = sel.getRangeAt(0);
-    if (!this.el.contains(range.startContainer)) return null;
-    return range;
+    const sel = window.getSelection()
+    if (!sel || sel.rangeCount === 0)
+      return null
+    const range = sel.getRangeAt(0)
+    if (!this.el.contains(range.startContainer))
+      return null
+    return range
   }
 
   getPrefix(): string {
-    const range = this.currentRange();
-    if (!range) return this.el.textContent ?? '';
-    const pre = range.cloneRange();
-    pre.selectNodeContents(this.el);
-    pre.setEnd(range.startContainer, range.startOffset);
-    return pre.toString();
+    const range = this.currentRange()
+    if (!range)
+      return this.el.textContent ?? ''
+    const pre = range.cloneRange()
+    pre.selectNodeContents(this.el)
+    pre.setEnd(range.startContainer, range.startOffset)
+    return pre.toString()
   }
 
   getSuffix(): string {
-    const range = this.currentRange();
-    if (!range) return '';
-    const post = range.cloneRange();
-    post.selectNodeContents(this.el);
-    post.setStart(range.endContainer, range.endOffset);
-    return post.toString();
+    const range = this.currentRange()
+    if (!range)
+      return ''
+    const post = range.cloneRange()
+    post.selectNodeContents(this.el)
+    post.setStart(range.endContainer, range.endOffset)
+    return post.toString()
   }
 
   getCaretRect(): DOMRect | null {
-    const range = this.currentRange();
-    if (!range) return null;
-    const rects = range.getClientRects();
-    if (rects.length > 0) return rects[rects.length - 1];
-    const box = this.el.getBoundingClientRect();
-    return new DOMRect(box.left, box.top, 0, box.height);
+    const range = this.currentRange()
+    if (!range)
+      return null
+    const rects = range.getClientRects()
+    if (rects.length > 0)
+      return rects[rects.length - 1]
+    const box = this.el.getBoundingClientRect()
+    return new DOMRect(box.left, box.top, 0, box.height)
   }
 
   insertAtCaret(text: string): void {
-    this.el.focus();
-    const sel = window.getSelection();
+    this.el.focus()
+    const sel = window.getSelection()
     if (!sel || sel.rangeCount === 0) {
-      this.el.textContent = (this.el.textContent ?? '') + text;
-      this.el.dispatchEvent(new InputEvent('input', { bubbles: true, data: text, inputType: 'insertText' }));
-      return;
+      this.el.textContent = (this.el.textContent ?? '') + text
+      this.el.dispatchEvent(new InputEvent('input', { bubbles: true, data: text, inputType: 'insertText' }))
+      return
     }
 
     // Prefer the modern API; falls back to execCommand for old browsers.
-    let inserted = false;
+    let inserted = false
     try {
       const event = new InputEvent('beforeinput', {
         bubbles: true,
         cancelable: true,
         data: text,
         inputType: 'insertText',
-      });
-      this.el.dispatchEvent(event);
+      })
+      this.el.dispatchEvent(event)
       if (!event.defaultPrevented) {
-        const range = sel.getRangeAt(0);
-        range.deleteContents();
-        const node = document.createTextNode(text);
-        range.insertNode(node);
-        range.setStartAfter(node);
-        range.setEndAfter(node);
-        sel.removeAllRanges();
-        sel.addRange(range);
-        inserted = true;
+        const range = sel.getRangeAt(0)
+        range.deleteContents()
+        const node = document.createTextNode(text)
+        range.insertNode(node)
+        range.setStartAfter(node)
+        range.setEndAfter(node)
+        sel.removeAllRanges()
+        sel.addRange(range)
+        inserted = true
       }
-    } catch {
+    }
+    catch {
       // fall through
     }
 
     if (!inserted) {
-      document.execCommand?.('insertText', false, text);
+      document.execCommand?.('insertText', false, text)
     }
 
     this.el.dispatchEvent(
       new InputEvent('input', { bubbles: true, data: text, inputType: 'insertText' }),
-    );
+    )
   }
 
   focus(): void {
-    this.el.focus();
+    this.el.focus()
   }
 
   isEmpty(): boolean {
-    const txt = this.el.textContent ?? '';
-    return txt.replace(/\s+/g, '') === '';
+    const txt = this.el.textContent ?? ''
+    return txt.replace(/\s+/g, '') === ''
   }
 }

@@ -1,49 +1,67 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue';
-import { loadSettings, saveSettings, hostMatches } from '~/utils/settings';
-import type { Settings } from '~/types';
+import type { Settings } from '~/types'
+import { onMounted, ref } from 'vue'
+import { openSettingsPage } from '~/utils/open-settings'
+import { isHostEnabled, loadSettings, saveSettings } from '~/utils/settings'
 
-const settings = ref<Settings | null>(null);
-const currentHost = ref<string>('');
-const hostEnabled = ref(true);
+const settings = ref<Settings | null>(null)
+const currentHost = ref<string>('')
+const currentUrl = ref('')
+const hostEnabled = ref(true)
 
 onMounted(async () => {
-  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
   try {
-    if (tab?.url) currentHost.value = new URL(tab.url).hostname;
-  } catch {
-    currentHost.value = '';
+    currentUrl.value = tab?.url ?? ''
+    if (tab?.url)
+      currentHost.value = new URL(tab.url).hostname
   }
-  const s = await loadSettings();
-  settings.value = s;
-  hostEnabled.value =
-    !!currentHost.value && s.enabledHosts.some((h: string) => hostMatches(tab?.url ?? '', h));
-});
+  catch {
+    currentUrl.value = ''
+    currentHost.value = ''
+  }
+  const stored = await loadSettings()
+  settings.value = stored
+  hostEnabled.value = !!currentHost.value && isHostEnabled(stored, currentUrl.value)
+})
 
 async function toggleGlobal() {
-  if (!settings.value) return;
-  const next = await saveSettings({ enabled: !settings.value.enabled });
-  settings.value = next;
+  if (!settings.value)
+    return
+  settings.value = await saveSettings({ enabled: !settings.value.enabled })
 }
 
 async function toggleCurrentHost() {
-  if (!settings.value || !currentHost.value) return;
-  const host = currentHost.value;
-  const list = settings.value.enabledHosts.slice();
-  const idx = list.indexOf(host);
-  if (idx >= 0) list.splice(idx, 1);
-  else list.push(host);
-  const next = await saveSettings({ enabledHosts: list });
-  settings.value = next;
-  hostEnabled.value = list.includes(host);
+  if (!settings.value || !currentHost.value)
+    return
+  const host = currentHost.value
+  const enabledHosts = settings.value.enabledHosts.slice()
+  const disabledHosts = settings.value.disabledHosts.filter(item => item !== host)
+
+  if (hostEnabled.value) {
+    if (
+      enabledHosts.length > 0
+      && !enabledHosts.some(item => item === host || host.endsWith(`.${item}`))
+    ) {
+      enabledHosts.push(host)
+    }
+  }
+  else {
+    if (!disabledHosts.includes(host)) {
+      disabledHosts.push(host)
+    }
+  }
+
+  settings.value = await saveSettings({ enabledHosts, disabledHosts })
+  hostEnabled.value = isHostEnabled(settings.value, currentUrl.value || `https://${host}`)
 }
 
 function openOptions() {
-  chrome.runtime.openOptionsPage();
+  void openSettingsPage()
 }
 
 async function openPlayground() {
-  await chrome.tabs.create({ url: chrome.runtime.getURL('playground.html') });
+  await chrome.tabs.create({ url: chrome.runtime.getURL('playground.html') })
 }
 </script>
 

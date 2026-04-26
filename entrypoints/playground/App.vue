@@ -1,150 +1,160 @@
 <script setup lang="ts">
-import { computed, onMounted, onBeforeUnmount, ref } from 'vue';
-import { debounce } from '~/utils/debounce';
+import type { CompletionResponse, Settings } from '~/types'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   buildCompletionFingerprint,
   buildCompletionSignalKey,
-} from '~/utils/completion-request';
-import { GhostTextOverlay } from '~/utils/ghost-text';
-import { nextId } from '~/utils/id';
-import { sendRuntimeMessage } from '~/utils/messages';
-import { syncPlaygroundGhostText } from '~/utils/playground-ghost';
-import { PROVIDER_PRESETS } from '~/utils/providers';
-import { loadSettings } from '~/utils/settings';
-import type { CompletionResponse, Settings } from '~/types';
+} from '~/utils/completion-request'
+import { debounce } from '~/utils/debounce'
+import { GhostTextOverlay } from '~/utils/ghost-text'
+import { nextId } from '~/utils/id'
+import { sendRuntimeMessage } from '~/utils/messages'
+import { openSettingsPage } from '~/utils/open-settings'
+import { syncPlaygroundGhostText } from '~/utils/playground-ghost'
+import { PROVIDER_PRESETS } from '~/utils/providers'
+import { loadSettings } from '~/utils/settings'
 
-const PLAYGROUND_SIGNAL_KEY = buildCompletionSignalKey('playground', 'textarea');
-const ghostOverlay = new GhostTextOverlay();
+const PLAYGROUND_SIGNAL_KEY = buildCompletionSignalKey('playground', 'textarea')
+const ghostOverlay = new GhostTextOverlay()
 
 const samplePrompt = `Please help me write a concise engineering prompt for:
 - clarifying scope
 - identifying tradeoffs
-- proposing the smallest implementation path`;
+- proposing the smallest implementation path`
 
-const draft = ref('');
-const suggestion = ref('');
-const loading = ref(false);
-const errorText = ref('');
-const infoText = ref('');
-const debugRawCompletion = ref('');
-const debugSanitizedCompletion = ref('');
-const debugRawChoice = ref('');
-const debugUserPrompt = ref('');
-const debugSystemPrompt = ref('');
-const debugDisableThinkingRequested = ref(false);
-const debugThinkingControlsFallback = ref(false);
-const debugReasoningParam = ref('');
-const debugThinkingParam = ref('');
-const lastRequestId = ref('');
-const lastLatencyMs = ref<number | null>(null);
-const settings = ref<Settings | null>(null);
-const lastFingerprint = ref('');
+const draft = ref('')
+const suggestion = ref('')
+const loading = ref(false)
+const errorText = ref('')
+const infoText = ref('')
+const debugRawCompletion = ref('')
+const debugSanitizedCompletion = ref('')
+const debugRawChoice = ref('')
+const debugUserPrompt = ref('')
+const debugSystemPrompt = ref('')
+const lastRequestId = ref('')
+const lastLatencyMs = ref<number | null>(null)
+const settings = ref<Settings | null>(null)
+const lastFingerprint = ref('')
 const completionMode = computed(() => {
-  if (loading.value) return 'Requesting';
-  if (errorText.value) return 'Error';
-  if (infoText.value) return 'Info';
-  if (suggestion.value) return 'Ready';
-  return 'Idle';
-});
+  if (loading.value)
+    return 'Requesting'
+  if (errorText.value)
+    return 'Error'
+  if (infoText.value)
+    return 'Info'
+  if (suggestion.value)
+    return 'Ready'
+  return 'Idle'
+})
 const providerPreset = computed(() => {
-  if (!settings.value) return null;
-  return PROVIDER_PRESETS[settings.value.provider];
-});
+  if (!settings.value)
+    return null
+  return PROVIDER_PRESETS[settings.value.provider]
+})
 
 const debouncedRequest = debounce(() => {
-  void requestCompletion();
-}, 250);
+  void requestCompletion()
+}, 250)
 
 onMounted(async () => {
-  settings.value = await loadSettings();
-  document.addEventListener('selectionchange', queueGhostSync, true);
-  document.addEventListener('scroll', queueGhostSync, true);
-  window.addEventListener('resize', queueGhostSync, true);
-});
+  settings.value = await loadSettings()
+  document.addEventListener('selectionchange', queueGhostSync, true)
+  document.addEventListener('scroll', queueGhostSync, true)
+  window.addEventListener('resize', queueGhostSync, true)
+})
 
 onBeforeUnmount(() => {
-  debouncedRequest.cancel();
-  void cancelActiveRequest();
-  document.removeEventListener('selectionchange', queueGhostSync, true);
-  document.removeEventListener('scroll', queueGhostSync, true);
-  window.removeEventListener('resize', queueGhostSync, true);
-  ghostOverlay.dispose();
-});
+  debouncedRequest.cancel()
+  void cancelActiveRequest()
+  document.removeEventListener('selectionchange', queueGhostSync, true)
+  document.removeEventListener('scroll', queueGhostSync, true)
+  window.removeEventListener('resize', queueGhostSync, true)
+  ghostOverlay.dispose()
+})
 
-const previewPrefix = computed(() => draft.value.slice(0, getCaretIndex()));
-const previewSuffix = computed(() => draft.value.slice(getCaretIndex()));
+const previewPrefix = computed(() => draft.value.slice(0, getCaretIndex()))
+const previewSuffix = computed(() => draft.value.slice(getCaretIndex()))
 const canRequest = computed(() => {
-  if (!settings.value) return false;
-  return previewPrefix.value.trim().length >= settings.value.minPrefixChars;
-});
+  if (!settings.value)
+    return false
+  return previewPrefix.value.trim().length >= settings.value.minPrefixChars
+})
 const blockedReason = computed(() => {
-  if (!settings.value) return 'Loading settings…';
-  if (!settings.value.enabled) return 'Copycat is disabled in settings.';
-  if (!settings.value.baseUrl) return 'Base URL is missing. Open settings and configure a provider.';
+  if (!settings.value)
+    return 'Loading settings…'
+  if (!settings.value.enabled)
+    return 'Copycat is disabled in settings.'
+  if (!settings.value.baseUrl)
+    return 'Base URL is missing. Open settings and configure a provider.'
   if (providerPreset.value?.requiresKey && !settings.value.apiKey.trim()) {
-    return `Missing API key for ${providerPreset.value.name}.`;
+    return `Missing API key for ${providerPreset.value.name}.`
   }
   if (!canRequest.value) {
-    return `Type at least ${settings.value.minPrefixChars} non-space characters to trigger completion.`;
+    return `Type at least ${settings.value.minPrefixChars} non-space characters to trigger completion.`
   }
-  return '';
-});
+  return ''
+})
 
 function getTextarea(): HTMLTextAreaElement | null {
-  return document.getElementById('playground-input') as HTMLTextAreaElement | null;
+  return document.getElementById('playground-input') as HTMLTextAreaElement | null
 }
 
 function getCaretIndex(): number {
-  const textarea = getTextarea();
-  if (!textarea) return draft.value.length;
-  return textarea.selectionStart ?? draft.value.length;
+  const textarea = getTextarea()
+  if (!textarea)
+    return draft.value.length
+  return textarea.selectionStart ?? draft.value.length
 }
 
 function queueGhostSync() {
   requestAnimationFrame(() => {
-    syncPlaygroundGhostText(ghostOverlay, getTextarea(), suggestion.value);
-  });
+    syncPlaygroundGhostText(ghostOverlay, getTextarea(), suggestion.value)
+  })
 }
 
 function scheduleCompletion() {
-  suggestion.value = '';
-  errorText.value = '';
-  infoText.value = '';
-  lastLatencyMs.value = null;
+  suggestion.value = ''
+  errorText.value = ''
+  infoText.value = ''
+  lastLatencyMs.value = null
 
   if (blockedReason.value) {
-    debouncedRequest.cancel();
-    void cancelActiveRequest();
-    lastFingerprint.value = '';
-    queueGhostSync();
-    return;
+    debouncedRequest.cancel()
+    void cancelActiveRequest()
+    lastFingerprint.value = ''
+    queueGhostSync()
+    return
   }
-  queueGhostSync();
-  debouncedRequest();
+  queueGhostSync()
+  debouncedRequest()
 }
 
 async function requestCompletion() {
-  if (!settings.value?.enabled) return;
-  const prefix = previewPrefix.value;
-  const suffix = previewSuffix.value;
-  if (prefix.trim().length < settings.value.minPrefixChars) return;
+  if (!settings.value?.enabled)
+    return
+  const prefix = previewPrefix.value
+  const suffix = previewSuffix.value
+  if (prefix.trim().length < settings.value.minPrefixChars)
+    return
 
   const fingerprint = buildCompletionFingerprint({
     host: 'playground',
     editorKind: 'textarea',
     prefix,
     suffix,
-  });
-  if (fingerprint === lastFingerprint.value) return;
+  })
+  if (fingerprint === lastFingerprint.value)
+    return
 
-  await cancelActiveRequest();
+  await cancelActiveRequest()
 
-  const requestId = nextId('play');
-  lastRequestId.value = requestId;
-  lastFingerprint.value = fingerprint;
-  loading.value = true;
-  errorText.value = '';
-  infoText.value = '';
+  const requestId = nextId('play')
+  lastRequestId.value = requestId
+  lastFingerprint.value = fingerprint
+  loading.value = true
+  errorText.value = ''
+  infoText.value = ''
 
   try {
     const response = await sendRuntimeMessage<CompletionResponse>({
@@ -156,132 +166,127 @@ async function requestCompletion() {
         signalKey: PLAYGROUND_SIGNAL_KEY,
         debug: true,
       },
-    });
-    if (lastRequestId.value !== requestId) return;
-    suggestion.value = response?.completion ?? '';
-    lastLatencyMs.value = response?.latencyMs ?? null;
-    debugRawCompletion.value = response?.debug?.rawCompletion ?? '';
-    debugSanitizedCompletion.value = response?.debug?.sanitizedCompletion ?? '';
-    debugRawChoice.value = response?.debug?.rawChoice ?? '';
-    debugUserPrompt.value = response?.debug?.requestBody.userPrompt ?? '';
-    debugSystemPrompt.value = response?.debug?.requestBody.systemPrompt ?? '';
-    debugDisableThinkingRequested.value = response?.debug?.disableThinkingRequested ?? false;
-    debugThinkingControlsFallback.value = response?.debug?.thinkingControlsFallback ?? false;
-    const debugRequestBody = response?.debug?.requestBody;
-    debugReasoningParam.value = debugRequestBody?.reasoning
-      ? JSON.stringify(debugRequestBody.reasoning, null, 2)
-      : '';
-    debugThinkingParam.value = debugRequestBody?.thinking
-      ? JSON.stringify(debugRequestBody.thinking, null, 2)
-      : '';
-    queueGhostSync();
+    })
+    if (lastRequestId.value !== requestId)
+      return
+    suggestion.value = response?.completion ?? ''
+    lastLatencyMs.value = response?.latencyMs ?? null
+    debugRawCompletion.value = response?.debug?.rawCompletion ?? ''
+    debugSanitizedCompletion.value = response?.debug?.sanitizedCompletion ?? ''
+    debugRawChoice.value = response?.debug?.rawChoice ?? ''
+    debugUserPrompt.value = response?.debug?.requestBody.userPrompt ?? ''
+    debugSystemPrompt.value = response?.debug?.requestBody.systemPrompt ?? ''
+    queueGhostSync()
     if (!suggestion.value) {
-      infoText.value =
-        'The request completed, but the model returned an empty completion for the current prefix.';
+      infoText.value
+        = 'The request completed, but the model returned an empty completion for the current prefix.'
     }
-  } catch (error) {
-    if (lastRequestId.value !== requestId) return;
-    errorText.value = error instanceof Error ? error.message : String(error);
-    suggestion.value = '';
-    queueGhostSync();
-  } finally {
+  }
+  catch (error) {
+    if (lastRequestId.value !== requestId)
+      return
+    errorText.value = error instanceof Error ? error.message : String(error)
+    suggestion.value = ''
+    queueGhostSync()
+  }
+  finally {
     if (lastRequestId.value === requestId) {
-      loading.value = false;
-      lastFingerprint.value = '';
+      loading.value = false
+      lastFingerprint.value = ''
     }
   }
 }
 
 async function cancelActiveRequest() {
   if (!lastRequestId.value) {
-    loading.value = false;
-    return;
+    loading.value = false
+    return
   }
-  const requestId = lastRequestId.value;
-  lastRequestId.value = '';
-  loading.value = false;
+  const requestId = lastRequestId.value
+  lastRequestId.value = ''
+  loading.value = false
   try {
     await sendRuntimeMessage({
       type: 'completion/cancel',
       payload: { id: requestId },
-    });
-  } catch {
+    })
+  }
+  catch {
     // Ignore runtime cancellation failures in the playground.
   }
 }
 
 function acceptSuggestion() {
-  if (!suggestion.value) return;
-  const textarea = getTextarea();
-  const caret = getCaretIndex();
-  const acceptedText = suggestion.value;
-  const nextValue =
-    draft.value.slice(0, caret) + acceptedText + draft.value.slice(caret);
-  draft.value = nextValue;
-  suggestion.value = '';
-  errorText.value = '';
-  infoText.value = 'Accepted the latest suggestion into the textarea.';
-  lastLatencyMs.value = null;
-  lastFingerprint.value = '';
+  if (!suggestion.value)
+    return
+  const textarea = getTextarea()
+  const caret = getCaretIndex()
+  const acceptedText = suggestion.value
+  const nextValue
+    = draft.value.slice(0, caret) + acceptedText + draft.value.slice(caret)
+  draft.value = nextValue
+  suggestion.value = ''
+  errorText.value = ''
+  infoText.value = 'Accepted the latest suggestion into the textarea.'
+  lastLatencyMs.value = null
+  lastFingerprint.value = ''
 
   requestAnimationFrame(() => {
-    if (!textarea) return;
-    const nextCaret = caret + acceptedText.length;
-    textarea.focus();
-    textarea.setSelectionRange(nextCaret, nextCaret);
-    queueGhostSync();
-  });
+    if (!textarea)
+      return
+    const nextCaret = caret + acceptedText.length
+    textarea.focus()
+    textarea.setSelectionRange(nextCaret, nextCaret)
+    queueGhostSync()
+  })
 }
 
 function handleKeydown(event: KeyboardEvent) {
   if (event.key === 'Tab' && suggestion.value) {
-    event.preventDefault();
-    acceptSuggestion();
-    return;
+    event.preventDefault()
+    acceptSuggestion()
+    return
   }
   if (event.key === 'Escape' && suggestion.value) {
-    event.preventDefault();
-    suggestion.value = '';
-    errorText.value = '';
-    infoText.value = 'Dismissed the latest suggestion.';
-    queueGhostSync();
+    event.preventDefault()
+    suggestion.value = ''
+    errorText.value = ''
+    infoText.value = 'Dismissed the latest suggestion.'
+    queueGhostSync()
   }
 }
 
 function clearAll() {
-  draft.value = '';
-  suggestion.value = '';
-  errorText.value = '';
-  infoText.value = '';
-  debugRawCompletion.value = '';
-  debugSanitizedCompletion.value = '';
-  debugRawChoice.value = '';
-  debugUserPrompt.value = '';
-  debugSystemPrompt.value = '';
-  debugDisableThinkingRequested.value = false;
-  debugThinkingControlsFallback.value = false;
-  debugReasoningParam.value = '';
-  debugThinkingParam.value = '';
-  lastRequestId.value = '';
-  lastLatencyMs.value = null;
-  lastFingerprint.value = '';
-  debouncedRequest.cancel();
-  queueGhostSync();
+  draft.value = ''
+  suggestion.value = ''
+  errorText.value = ''
+  infoText.value = ''
+  debugRawCompletion.value = ''
+  debugSanitizedCompletion.value = ''
+  debugRawChoice.value = ''
+  debugUserPrompt.value = ''
+  debugSystemPrompt.value = ''
+  lastRequestId.value = ''
+  lastLatencyMs.value = null
+  lastFingerprint.value = ''
+  debouncedRequest.cancel()
+  queueGhostSync()
 }
 
 function insertSample() {
-  draft.value = samplePrompt;
+  draft.value = samplePrompt
   requestAnimationFrame(() => {
-    const textarea = getTextarea();
-    if (!textarea) return;
-    textarea.focus();
-    textarea.setSelectionRange(draft.value.length, draft.value.length);
-    scheduleCompletion();
-  });
+    const textarea = getTextarea()
+    if (!textarea)
+      return
+    textarea.focus()
+    textarea.setSelectionRange(draft.value.length, draft.value.length)
+    scheduleCompletion()
+  })
 }
 
 function openOptions() {
-  chrome.runtime.openOptionsPage();
+  void openSettingsPage()
 }
 </script>
 
@@ -421,22 +426,6 @@ function openOptions() {
                 </dt>
                 <dd class="mt-1 text-neutral-800">{{ settings?.enabled ? 'yes' : 'no' }}</dd>
               </div>
-              <div>
-                <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Disable thinking
-                </dt>
-                <dd class="mt-1 text-neutral-800">
-                  {{ debugDisableThinkingRequested ? 'requested' : 'not requested' }}
-                </dd>
-              </div>
-              <div>
-                <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Thinking fallback
-                </dt>
-                <dd class="mt-1 text-neutral-800">
-                  {{ debugThinkingControlsFallback ? 'used plain retry' : 'not used' }}
-                </dd>
-              </div>
             </dl>
           </div>
 
@@ -472,18 +461,6 @@ function openOptions() {
                   Last info
                 </div>
                 <pre class="overflow-auto rounded-md bg-sky-50 p-3 text-xs text-sky-800">{{ infoText }}</pre>
-              </div>
-              <div>
-                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Reasoning param
-                </div>
-                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugReasoningParam || '(empty)' }}</pre>
-              </div>
-              <div>
-                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Thinking param
-                </div>
-                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugThinkingParam || '(empty)' }}</pre>
               </div>
               <div>
                 <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">

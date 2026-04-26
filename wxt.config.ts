@@ -1,11 +1,18 @@
-import { defineConfig } from 'wxt';
+import { defineConfig } from 'wxt'
+
+const DEV_EXTENSION_CSP = {
+  extension_pages:
+    'script-src \'self\' \'wasm-unsafe-eval\' http://localhost:3000 http://localhost:3001; object-src \'self\';',
+  sandbox:
+    'script-src \'self\' \'unsafe-inline\' \'unsafe-eval\' http://localhost:3000 http://localhost:3001; sandbox allow-scripts allow-forms allow-popups allow-modals; child-src \'self\';',
+}
 
 // See https://wxt.dev/api/config.html
 export default defineConfig({
   modules: ['@wxt-dev/module-vue'],
   srcDir: '.',
   outDir: '.output',
-  manifest: {
+  manifest: env => ({
     name: 'Copycat — Context-aware autocomplete for AI chats',
     short_name: 'Copycat',
     description:
@@ -21,10 +28,15 @@ export default defineConfig({
       page: 'options.html',
       open_in_tab: true,
     },
-  },
+    ...(env.command === 'serve'
+      ? {
+          content_security_policy: DEV_EXTENSION_CSP,
+        }
+      : {}),
+  }),
   vite: () => ({
     css: {
       postcss: './postcss.config.js',
     },
   }),
-});
+})

@@ -1,94 +1,99 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue';
-import { buildModelsUrl, parseModelListResponse, type DiscoveredModel } from '~/utils/model-discovery';
+import type { ProviderId, Settings } from '~/types'
+import type { DiscoveredModel } from '~/utils/model-discovery'
+import { computed, onMounted, ref, watch } from 'vue'
+import { buildModelsUrl, parseModelListResponse } from '~/utils/model-discovery'
 import {
   buildOpenAICompatibleHeaders,
   extractAssistantMessageContent,
   joinOpenAICompatibleUrl,
-} from '~/utils/openai-compatible';
-import { DEFAULT_SETTINGS, DEFAULT_SYSTEM_PROMPT, loadSettings, saveSettings } from '~/utils/settings';
-import { PROVIDER_ORDER, PROVIDER_PRESETS, resolveProviderPreset } from '~/utils/providers';
-import type { ProviderId, Settings } from '~/types';
+} from '~/utils/openai-compatible'
+import { PROVIDER_ORDER, PROVIDER_PRESETS, resolveProviderPreset } from '~/utils/providers'
+import { DEFAULT_SETTINGS, DEFAULT_SYSTEM_PROMPT, loadSettings, saveSettings } from '~/utils/settings'
 
-const settings = ref<Settings>({ ...DEFAULT_SETTINGS });
-const loaded = ref(false);
-const saving = ref(false);
-const toast = ref<{ kind: 'ok' | 'err'; text: string } | null>(null);
-const testingConnection = ref(false);
-const connectionResult = ref<{ ok: boolean; message: string } | null>(null);
-const fetchingModels = ref(false);
-const modelsError = ref('');
-const discoveredModels = ref<DiscoveredModel[]>([]);
-const loadError = ref('');
+const settings = ref<Settings>({ ...DEFAULT_SETTINGS })
+const loaded = ref(false)
+const saving = ref(false)
+const toast = ref<{ kind: 'ok' | 'err', text: string } | null>(null)
+const testingConnection = ref(false)
+const connectionResult = ref<{ ok: boolean, message: string } | null>(null)
+const fetchingModels = ref(false)
+const modelsError = ref('')
+const discoveredModels = ref<DiscoveredModel[]>([])
+const loadError = ref('')
+const hostsText = ref('')
 
-const hostsText = ref('');
-
-const provider = computed(
-  () => resolveProviderPreset(settings.value.provider),
-);
+const provider = computed(() => resolveProviderPreset(settings.value.provider))
 
 onMounted(async () => {
   try {
-    const s = await loadSettings();
-    settings.value = s;
-    hostsText.value = s.enabledHosts.join('\n');
-  } catch (e) {
-    loadError.value =
-      e instanceof Error ? e.message : 'Failed to load settings. Defaults are shown instead.';
-    settings.value = { ...DEFAULT_SETTINGS };
-    hostsText.value = DEFAULT_SETTINGS.enabledHosts.join('\n');
-  } finally {
-    loaded.value = true;
+    const stored = await loadSettings()
+    settings.value = stored
+    hostsText.value = stored.enabledHosts.join('\n')
   }
-});
+  catch (error) {
+    loadError.value
+      = error instanceof Error ? error.message : 'Failed to load settings. Defaults are shown instead.'
+    settings.value = { ...DEFAULT_SETTINGS }
+    hostsText.value = DEFAULT_SETTINGS.enabledHosts.join('\n')
+  }
+  finally {
+    loaded.value = true
+  }
+})
 
 watch(
   () => settings.value.provider,
-  (id: ProviderId, prev) => {
-    if (!loaded.value || id === prev) return;
-    const preset = resolveProviderPreset(id);
-    if (preset.baseUrl) settings.value.baseUrl = preset.baseUrl;
-    if (preset.defaultModel) settings.value.model = preset.defaultModel;
+  (id: ProviderId, previous) => {
+    if (!loaded.value || id === previous)
+      return
+    const preset = resolveProviderPreset(id)
+    if (preset.baseUrl)
+      settings.value.baseUrl = preset.baseUrl
+    if (preset.defaultModel)
+      settings.value.model = preset.defaultModel
   },
-);
+)
 
 async function persist() {
-  saving.value = true;
+  saving.value = true
   try {
     settings.value.enabledHosts = hostsText.value
       .split(/\r?\n/)
-      .map((s: string) => s.trim())
-      .filter(Boolean);
-    const next = await saveSettings(settings.value);
-    settings.value = next;
-    hostsText.value = next.enabledHosts.join('\n');
-    showToast('ok', 'Settings saved');
-  } catch (e) {
-    showToast('err', e instanceof Error ? e.message : String(e));
-  } finally {
-    saving.value = false;
+      .map(item => item.trim())
+      .filter(Boolean)
+    const next = await saveSettings(settings.value)
+    settings.value = next
+    hostsText.value = next.enabledHosts.join('\n')
+    showToast('ok', 'Settings saved')
+  }
+  catch (error) {
+    showToast('err', error instanceof Error ? error.message : String(error))
+  }
+  finally {
+    saving.value = false
   }
 }
 
 function resetSystemPrompt() {
-  settings.value.systemPrompt = DEFAULT_SYSTEM_PROMPT;
+  settings.value.systemPrompt = DEFAULT_SYSTEM_PROMPT
 }
 
 function resetAll() {
-  if (!confirm('Reset all settings to defaults? Your API key will be cleared.')) return;
-  settings.value = { ...DEFAULT_SETTINGS };
-  hostsText.value = DEFAULT_SETTINGS.enabledHosts.join('\n');
+  if (!confirm('Reset all settings to defaults? Your API key will be cleared.'))
+    return
+  settings.value = { ...DEFAULT_SETTINGS }
+  hostsText.value = DEFAULT_SETTINGS.enabledHosts.join('\n')
 }
 
 async function testConnection() {
-  testingConnection.value = true;
-  connectionResult.value = null;
+  testingConnection.value = true
+  connectionResult.value = null
   try {
-    const url = joinOpenAICompatibleUrl(settings.value.baseUrl, '/chat/completions');
-    const headers = buildOpenAICompatibleHeaders(settings.value.apiKey);
+    const url = joinOpenAICompatibleUrl(settings.value.baseUrl, '/chat/completions')
     const res = await fetch(url, {
       method: 'POST',
-      headers,
+      headers: buildOpenAICompatibleHeaders(settings.value.apiKey),
       body: JSON.stringify({
         model: settings.value.model,
         messages: [
@@ -98,69 +103,73 @@ async function testConnection() {
         max_tokens: 4,
         temperature: 0,
       }),
-    });
+    })
     if (!res.ok) {
-      const text = await res.text();
+      const text = await res.text()
       connectionResult.value = {
         ok: false,
         message: `HTTP ${res.status}: ${text.slice(0, 180)}`,
-      };
-      return;
+      }
+      return
     }
-    const data = await res.json();
-    const reply = extractAssistantMessageContent(data) || '(empty)';
-    connectionResult.value = { ok: true, message: `Connected — reply: ${reply}` };
-  } catch (e) {
+
+    const data = await res.json()
+    const reply = extractAssistantMessageContent(data) || '(empty)'
+    connectionResult.value = { ok: true, message: `Connected — reply: ${reply}` }
+  }
+  catch (error) {
     connectionResult.value = {
       ok: false,
-      message: e instanceof Error ? e.message : String(e),
-    };
-  } finally {
-    testingConnection.value = false;
+      message: error instanceof Error ? error.message : String(error),
+    }
+  }
+  finally {
+    testingConnection.value = false
   }
 }
 
 async function fetchModels() {
-  fetchingModels.value = true;
-  modelsError.value = '';
-  discoveredModels.value = [];
+  fetchingModels.value = true
+  modelsError.value = ''
+  discoveredModels.value = []
 
   try {
-    const url = buildModelsUrl(settings.value.baseUrl);
-    const headers = buildOpenAICompatibleHeaders(settings.value.apiKey);
+    const url = buildModelsUrl(settings.value.baseUrl)
     const res = await fetch(url, {
       method: 'GET',
-      headers,
-    });
+      headers: buildOpenAICompatibleHeaders(settings.value.apiKey),
+    })
     if (!res.ok) {
-      const text = await res.text();
-      modelsError.value = `HTTP ${res.status}: ${text.slice(0, 180)}`;
-      return;
+      const text = await res.text()
+      modelsError.value = `HTTP ${res.status}: ${text.slice(0, 180)}`
+      return
     }
 
-    const data = await res.json();
-    const models = parseModelListResponse(data);
+    const data = await res.json()
+    const models = parseModelListResponse(data)
     if (models.length === 0) {
-      modelsError.value = 'No models were returned by this host.';
-      return;
+      modelsError.value = 'No models were returned by this host.'
+      return
     }
-    discoveredModels.value = models;
-  } catch (e) {
-    modelsError.value = e instanceof Error ? e.message : String(e);
-  } finally {
-    fetchingModels.value = false;
+    discoveredModels.value = models
+  }
+  catch (error) {
+    modelsError.value = error instanceof Error ? error.message : String(error)
+  }
+  finally {
+    fetchingModels.value = false
   }
 }
 
 function useDiscoveredModel(modelId: string) {
-  settings.value.model = modelId;
+  settings.value.model = modelId
 }
 
 function showToast(kind: 'ok' | 'err', text: string) {
-  toast.value = { kind, text };
+  toast.value = { kind, text }
   setTimeout(() => {
-    toast.value = null;
-  }, 2400);
+    toast.value = null
+  }, 2400)
 }
 </script>
 
@@ -220,15 +229,24 @@ function showToast(kind: 'ok' | 'err', text: string) {
 
           <div>
             <label class="label">Model</label>
-            <input v-model="settings.model" class="input" placeholder="e.g. llama-3.1-8b-instant" />
+            <input
+              v-model="settings.model"
+              class="input"
+              placeholder="e.g. llama-3.1-8b-instant"
+            />
           </div>
 
           <div class="md:col-span-2">
             <label class="label">Base URL</label>
-            <input v-model="settings.baseUrl" class="input" placeholder="https://api.groq.com/openai/v1" />
+            <input
+              v-model="settings.baseUrl"
+              class="input"
+              placeholder="https://api.groq.com/openai/v1"
+            />
             <p class="mt-1 text-xs text-neutral-500">
-              Any OpenAI-compatible <code class="rounded bg-neutral-100 px-1">/chat/completions</code>
-              endpoint works — Groq, OpenAI, DeepSeek, Ollama, LM Studio, etc.
+              Any OpenAI-compatible
+              <code class="rounded bg-neutral-100 px-1">/chat/completions</code>
+              endpoint works.
             </p>
           </div>
 
@@ -242,7 +260,7 @@ function showToast(kind: 'ok' | 'err', text: string) {
               autocomplete="off"
             />
             <p class="mt-1 text-xs text-neutral-500">
-              Stored locally in <code>chrome.storage.local</code>. Never sent anywhere except the endpoint above.
+              Stored locally in <code>chrome.storage.local</code>.
             </p>
           </div>
         </div>
@@ -263,63 +281,45 @@ function showToast(kind: 'ok' | 'err', text: string) {
           </p>
         </div>
 
-        <div class="mt-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4">
-          <div class="mb-2 flex items-center justify-between">
-            <h3 class="text-sm font-semibold text-neutral-800">Available models</h3>
-            <span class="text-xs text-neutral-500">Uses the current base URL and API key</span>
-          </div>
-
-          <p v-if="modelsError" class="text-sm text-rose-600">
-            {{ modelsError }}
-          </p>
-
-          <p v-else-if="fetchingModels" class="text-sm text-neutral-500">
-            Fetching model list…
-          </p>
-
-          <p v-else-if="discoveredModels.length === 0" class="text-sm text-neutral-500">
-            Click <span class="font-medium">Fetch models</span> to inspect the current host.
-          </p>
-
-          <ul v-else class="space-y-2">
-            <li
-              v-for="model in discoveredModels"
-              :key="model.id"
-              class="flex items-center justify-between gap-3 rounded-md border border-neutral-200 bg-white px-3 py-2"
+        <div v-if="modelsError" class="mt-3 text-sm text-rose-600">
+          {{ modelsError }}
+        </div>
+        <div v-if="discoveredModels.length" class="mt-4">
+          <div class="mb-2 text-sm font-medium text-neutral-700">Host models</div>
+          <div class="flex flex-wrap gap-2">
+            <button
+              v-for="item in discoveredModels"
+              :key="item.id"
+              class="rounded-full border border-neutral-200 px-3 py-1 text-xs hover:bg-neutral-50"
+              @click="useDiscoveredModel(item.id)"
             >
-              <div class="min-w-0">
-                <div class="truncate font-mono text-sm text-neutral-800">{{ model.id }}</div>
-                <div v-if="model.ownedBy" class="text-xs text-neutral-500">
-                  owned by {{ model.ownedBy }}
-                </div>
-              </div>
-              <button class="btn-ghost shrink-0" @click="useDiscoveredModel(model.id)">Use</button>
-            </li>
-          </ul>
+              {{ item.id }}
+            </button>
+          </div>
         </div>
       </section>
 
       <section class="card mb-6">
         <h2 class="mb-4 text-base font-semibold">Completion behavior</h2>
 
-        <div class="grid grid-cols-1 gap-4 md:grid-cols-3">
-          <div>
-            <label class="label">Debounce (ms)</label>
-            <input
-              v-model.number="settings.debounceMs"
-              type="number"
-              min="50"
-              max="2000"
-              class="input"
-            />
-          </div>
+        <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
             <label class="label">Min prefix chars</label>
             <input
               v-model.number="settings.minPrefixChars"
               type="number"
               min="1"
-              max="40"
+              max="32"
+              class="input"
+            />
+          </div>
+          <div>
+            <label class="label">Debounce (ms)</label>
+            <input
+              v-model.number="settings.debounceMs"
+              type="number"
+              min="0"
+              max="5000"
               class="input"
             />
           </div>
@@ -344,14 +344,6 @@ function showToast(kind: 'ok' | 'err', text: string) {
               class="input"
             />
           </div>
-          <label class="flex items-center gap-3 rounded-md border border-neutral-200 px-3 py-2 text-sm md:col-span-2">
-            <input
-              v-model="settings.disableThinking"
-              type="checkbox"
-              class="h-4 w-4 rounded border-neutral-300 text-brand-600"
-            />
-            <span>Disable thinking when supported</span>
-          </label>
         </div>
 
         <div class="mt-4">
@@ -382,10 +374,16 @@ function showToast(kind: 'ok' | 'err', text: string) {
         />
       </section>
 
-      <div class="sticky bottom-4 flex items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-white/90 p-4 shadow-lg backdrop-blur">
+      <div
+        class="sticky bottom-4 flex items-center justify-between gap-3 rounded-xl border border-neutral-200 bg-white/90 p-4 shadow-lg backdrop-blur"
+      >
         <button class="btn-ghost" @click="resetAll">Reset to defaults</button>
         <div class="flex items-center gap-3">
-          <span v-if="toast" class="text-sm" :class="toast.kind === 'ok' ? 'text-emerald-600' : 'text-rose-600'">
+          <span
+            v-if="toast"
+            class="text-sm"
+            :class="toast.kind === 'ok' ? 'text-emerald-600' : 'text-rose-600'"
+          >
             {{ toast.text }}
           </span>
           <button class="btn-primary" :disabled="saving" @click="persist">

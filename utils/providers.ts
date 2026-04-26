@@ -1,5 +1,18 @@
-import type { ProviderId, ProviderPreset } from '~/types';
+import type { ProviderId, ProviderPreset } from '~/types'
 
+/**
+ * Built-in provider presets shown in the settings UI.
+ *
+ * Use when:
+ * - populating provider choices
+ * - applying neutral default base URLs and models
+ *
+ * Expects:
+ * - custom providers to be configured by the user rather than by a committed preset
+ *
+ * Returns:
+ * - the canonical preset map keyed by provider id
+ */
 export const PROVIDER_PRESETS: Record<ProviderId, ProviderPreset> = {
   groq: {
     id: 'groq',
@@ -36,20 +49,29 @@ export const PROVIDER_PRESETS: Record<ProviderId, ProviderPreset> = {
   custom: {
     id: 'custom',
     name: 'Custom (OpenAI-compatible)',
-    baseUrl: 'https://llm.yunhaoli.top/v1',
-    defaultModel: 'free',
+    baseUrl: '',
+    defaultModel: '',
     requiresKey: false,
   },
-};
+}
 
-export const PROVIDER_ORDER: ProviderId[] = [
-  'groq',
-  'openai',
-  'deepseek',
-  'ollama',
-  'custom',
-];
+/**
+ * Stable provider ordering for settings and picker UIs.
+ */
+export const PROVIDER_ORDER: ProviderId[] = ['groq', 'openai', 'deepseek', 'ollama', 'custom']
 
+/**
+ * Resolves a provider id into the matching preset, falling back to `custom`.
+ *
+ * Use when:
+ * - a settings surface needs the preset metadata for the current provider
+ *
+ * Expects:
+ * - `providerId` to come from normalized settings in normal flows
+ *
+ * Returns:
+ * - the matching preset or the custom fallback preset
+ */
 export function resolveProviderPreset(providerId: ProviderId): ProviderPreset {
-  return PROVIDER_PRESETS[providerId] ?? PROVIDER_PRESETS.custom;
+  return PROVIDER_PRESETS[providerId] ?? PROVIDER_PRESETS.custom
 }
