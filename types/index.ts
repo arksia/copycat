@@ -38,6 +38,13 @@ export interface CompletionDebugInfo {
   sanitizedCompletion: string
   rawChoice: string
   cacheHit: boolean
+  knowledgeContext?: string
+  knowledgeQuery?: string
+  knowledgeChunks?: Array<{
+    id: string
+    sourceName: string
+    text: string
+  }>
   requestBody: {
     systemPrompt: string
     userPrompt: string
@@ -74,6 +81,11 @@ export type RuntimeResponse<T> = RuntimeSuccess<T> | RuntimeFailure
 export type RuntimeMessage
   = | { type: 'completion/request', payload: CompletionRequest }
     | { type: 'completion/cancel', payload: { id: string } }
+    | { type: 'completion/event', payload: CompletionEvent }
+    | { type: 'knowledge/delete', payload: { docId: string, kbId: string } }
+    | { type: 'knowledge/import', payload: KnowledgeImportRequest }
+    | { type: 'knowledge/list', payload: { kbId: string } }
+    | { type: 'knowledge/search', payload: KnowledgeSearchRequest }
     | { type: 'settings/get' }
     | { type: 'settings/set', payload: Partial<Settings> }
 
@@ -85,4 +97,58 @@ export interface CompletionEvent {
   latencyMs: number
   timestamp: number
   host: string
+}
+
+export type KnowledgeSourceType = 'html' | 'manual' | 'markdown' | 'txt'
+
+export interface KnowledgeDocument {
+  id: string
+  kbId: string
+  title: string
+  sourceType: KnowledgeSourceType
+  sourceUri?: string
+  checksum: string
+  metadata: {
+    chunkCount: number
+    charCount: number
+  } & Record<string, unknown>
+  createdAt: number
+  updatedAt: number
+}
+
+export interface KnowledgeChunk {
+  id: string
+  kbId: string
+  docId: string
+  text: string
+  keywords: string[]
+  metadata: {
+    charCount: number
+    sourceName: string
+    tokenCount: number
+  }
+}
+
+export interface KnowledgeImportRequest {
+  kbId: string
+  rawContent: string
+  sourceType: KnowledgeSourceType
+  sourceUri?: string
+  title: string
+}
+
+export interface KnowledgeImportResult {
+  chunkCount: number
+  document: KnowledgeDocument
+}
+
+export interface KnowledgeSearchRequest {
+  kbId: string
+  query: string
+  topK: number
+}
+
+export interface KnowledgeDeleteResult {
+  chunkCount: number
+  docId: string
 }

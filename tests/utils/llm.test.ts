@@ -95,4 +95,34 @@ describe('completeOnceDetailed', () => {
     expect(result.debug.requestBody.systemPrompt).toBe(DEFAULT_SYSTEM_PROMPT)
     expect(result.debug.requestBody.userPrompt).toContain('[Prefix]')
   })
+
+  it('includes packed knowledge context in the user prompt when provided', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: '，并优化滚动体验。',
+            },
+          },
+        ],
+      }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    await completeOnceDetailed({
+      prefix: '我需要搭建一个个人网站，这个网站要使用虚拟列表',
+      context: '[Virtual List Notes]\n虚拟列表适合处理长列表渲染和滚动性能问题。',
+      settings: baseSettings,
+    })
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    const body = JSON.parse(String(init.body)) as {
+      messages: Array<{ content: string, role: string }>
+    }
+
+    expect(body.messages[1]?.content).toContain('[Knowledge]')
+    expect(body.messages[1]?.content).toContain('Virtual List Notes')
+  })
 })

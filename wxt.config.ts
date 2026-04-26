@@ -18,7 +18,7 @@ export default defineConfig({
     description:
       'Your portable project memory. Ghost-text autocomplete in any AI chat window, powered by your own knowledge base.',
     version: '0.0.1',
-    permissions: ['storage', 'activeTab', 'scripting'],
+    permissions: ['storage', 'activeTab', 'scripting', 'offscreen'],
     host_permissions: ['<all_urls>'],
     action: {
       default_title: 'Copycat',

@@ -1,4 +1,5 @@
 import type {
+  CompletionEvent,
   CompletionRequest,
   CompletionResponse,
   Settings,
@@ -31,6 +32,8 @@ function startCopycatController(): void {
 interface ActiveSuggestion {
   id: string
   editor: EditorHandle
+  latencyMs: number
+  originalSuggestion: string
   prefix: string
   suggestion: string
 }
@@ -176,7 +179,7 @@ class CopycatController {
         if (typed && this.active.suggestion.startsWith(typed)) {
           const remaining = this.active.suggestion.slice(typed.length)
           if (!remaining) {
-            this.dismiss()
+            this.dismiss('accepted')
           }
           else {
             this.active = {
@@ -209,7 +212,7 @@ class CopycatController {
     if (e.key === 'Escape') {
       e.preventDefault()
       e.stopPropagation()
-      this.dismiss()
+      this.dismiss('rejected')
       return
     }
     if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) {
@@ -285,7 +288,14 @@ class CopycatController {
       if (editor.getPrefix() !== prefix)
         return
 
-      this.active = { id, editor, prefix, suggestion: res.completion }
+      this.active = {
+        id,
+        editor,
+        latencyMs: res.latencyMs,
+        originalSuggestion: res.completion,
+        prefix,
+        suggestion: res.completion,
+      }
       this.overlay.show(editor, res.completion)
     }
     catch (err) {
@@ -302,13 +312,15 @@ class CopycatController {
   private acceptActive() {
     if (!this.active)
       return
-    const { editor, suggestion } = this.active
+    const active = this.active
+    const { editor, suggestion } = active
     this.overlay.hide()
     this.active = null
     editor.insertAtCaret(suggestion)
+    this.emitCompletionEvent(active, 'accepted')
   }
 
-  private dismiss() {
+  private dismiss(action: CompletionEvent['action'] = 'ignored') {
     if (this.lastRequestId !== null) {
       void sendRuntimeMessage({ type: 'completion/cancel', payload: { id: this.lastRequestId } }).catch(
         () => {},
@@ -317,8 +329,30 @@ class CopycatController {
     }
     this.pendingFingerprint = null
     this.debouncedRequest.cancel()
-    if (this.active)
+    if (this.active) {
+      this.emitCompletionEvent(this.active, action)
       this.active = null
+    }
     this.overlay.hide()
+  }
+
+  private emitCompletionEvent(
+    active: ActiveSuggestion,
+    action: CompletionEvent['action'],
+  ) {
+    const payload: CompletionEvent = {
+      id: active.id,
+      prefix: active.prefix,
+      suggestion: active.originalSuggestion,
+      action,
+      latencyMs: active.latencyMs,
+      timestamp: Date.now(),
+      host: location.host,
+    }
+
+    void sendRuntimeMessage<void>({
+      type: 'completion/event',
+      payload,
+    }).catch(() => {})
   }
 }

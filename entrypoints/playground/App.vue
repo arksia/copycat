@@ -32,6 +32,13 @@ const debugSanitizedCompletion = ref('')
 const debugRawChoice = ref('')
 const debugUserPrompt = ref('')
 const debugSystemPrompt = ref('')
+const debugKnowledgeContext = ref('')
+const debugKnowledgeQuery = ref('')
+const debugKnowledgeChunks = ref<Array<{
+  id: string
+  sourceName: string
+  text: string
+}>>([])
 const lastRequestId = ref('')
 const lastLatencyMs = ref<number | null>(null)
 const settings = ref<Settings | null>(null)
@@ -176,6 +183,9 @@ async function requestCompletion() {
     debugRawChoice.value = response?.debug?.rawChoice ?? ''
     debugUserPrompt.value = response?.debug?.requestBody.userPrompt ?? ''
     debugSystemPrompt.value = response?.debug?.requestBody.systemPrompt ?? ''
+    debugKnowledgeContext.value = response?.debug?.knowledgeContext ?? ''
+    debugKnowledgeQuery.value = response?.debug?.knowledgeQuery ?? ''
+    debugKnowledgeChunks.value = response?.debug?.knowledgeChunks ?? []
     queueGhostSync()
     if (!suggestion.value) {
       infoText.value
@@ -187,6 +197,9 @@ async function requestCompletion() {
       return
     errorText.value = error instanceof Error ? error.message : String(error)
     suggestion.value = ''
+    debugKnowledgeContext.value = ''
+    debugKnowledgeQuery.value = ''
+    debugKnowledgeChunks.value = []
     queueGhostSync()
   }
   finally {
@@ -461,6 +474,24 @@ function openOptions() {
                   Last info
                 </div>
                 <pre class="overflow-auto rounded-md bg-sky-50 p-3 text-xs text-sky-800">{{ infoText }}</pre>
+              </div>
+              <div>
+                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  Knowledge query
+                </div>
+                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeQuery || '(empty)' }}</pre>
+              </div>
+              <div>
+                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  Knowledge context
+                </div>
+                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeContext || '(empty)' }}</pre>
+              </div>
+              <div>
+                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  Knowledge chunks
+                </div>
+                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeChunks.length ? JSON.stringify(debugKnowledgeChunks, null, 2) : '(empty)' }}</pre>
               </div>
               <div>
                 <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">

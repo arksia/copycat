@@ -11,6 +11,30 @@ export interface CompletionCacheKeyParts {
   context?: string
 }
 
+/**
+ * Default upper bound for in-memory completion cache entries.
+ *
+ * Use when:
+ * - creating the standard short-lived in-memory cache
+ * - aligning local persistent cache heuristics with the same capacity assumptions
+ *
+ * Returns:
+ * - the default maximum entry count
+ */
+export const DEFAULT_COMPLETION_CACHE_MAX_ENTRIES = 50
+
+/**
+ * Default time-to-live for completion cache entries in milliseconds.
+ *
+ * Use when:
+ * - creating the standard short-lived completion cache
+ * - reusing the same expiry policy for persisted cache rows
+ *
+ * Returns:
+ * - the default cache TTL in milliseconds
+ */
+export const DEFAULT_COMPLETION_CACHE_TTL_MS = 15_000
+
 interface CacheEntry {
   value: string
   expiresAt: number
@@ -52,8 +76,8 @@ export class CompletionMemoryCache {
   private readonly entries = new Map<string, CacheEntry>()
 
   constructor(
-    private readonly maxEntries = 50,
-    private readonly ttlMs = 15_000,
+    private readonly maxEntries = DEFAULT_COMPLETION_CACHE_MAX_ENTRIES,
+    private readonly ttlMs = DEFAULT_COMPLETION_CACHE_TTL_MS,
   ) {}
 
   get(key: string, now = Date.now()): string | null {

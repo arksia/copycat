@@ -1,0 +1,128 @@
+import type { CompletionEvent } from '~/types'
+import { afterEach, describe, expect, it } from 'vitest'
+import { deleteCopycatDb } from '~/utils/db/client'
+import {
+  getPersistedCompletion,
+  putPersistedCompletion,
+} from '~/utils/db/repositories/completions'
+import {
+  listRecentCompletionEventsByHost,
+  putCompletionEvent,
+} from '~/utils/db/repositories/events'
+import {
+  listKnowledgeDocuments,
+  putKnowledgeChunks,
+  putKnowledgeDocument,
+  searchKnowledgeChunks,
+} from '~/utils/db/repositories/knowledge'
+
+afterEach(async () => {
+  await deleteCopycatDb()
+})
+
+describe('indexeddb repositories', () => {
+  it('stores and lists recent completion events for one host in reverse time order', async () => {
+    const olderEvent: CompletionEvent = {
+      id: 'evt-1',
+      prefix: '我需要构建一个博客系统',
+      suggestion: '，并且支持评论和标签。',
+      action: 'accepted',
+      latencyMs: 120,
+      timestamp: 100,
+      host: 'chatgpt.com',
+    }
+    const newerEvent: CompletionEvent = {
+      id: 'evt-2',
+      prefix: '我需要构建一个博客系统',
+      suggestion: '，并支持管理后台。',
+      action: 'ignored',
+      latencyMs: 140,
+      timestamp: 200,
+      host: 'chatgpt.com',
+    }
+    const otherHostEvent: CompletionEvent = {
+      id: 'evt-3',
+      prefix: 'hello',
+      suggestion: ' world',
+      action: 'rejected',
+      latencyMs: 80,
+      timestamp: 300,
+      host: 'claude.ai',
+    }
+
+    await putCompletionEvent(olderEvent)
+    await putCompletionEvent(newerEvent)
+    await putCompletionEvent(otherHostEvent)
+
+    const events = await listRecentCompletionEventsByHost('chatgpt.com', 5)
+
+    expect(events).toEqual([newerEvent, olderEvent])
+  })
+
+  it('returns persisted completions while fresh and evicts them after expiry', async () => {
+    await putPersistedCompletion({
+      key: 'cache-key',
+      value: '，并带有标签系统。',
+      expiresAt: 200,
+      updatedAt: 100,
+    })
+
+    expect(await getPersistedCompletion('cache-key', 150)).toBe('，并带有标签系统。')
+    expect(await getPersistedCompletion('cache-key', 250)).toBeNull()
+    expect(await getPersistedCompletion('cache-key', 150)).toBeNull()
+  })
+
+  it('stores knowledge documents and searches chunks inside one knowledge base', async () => {
+    await putKnowledgeDocument({
+      id: 'doc-1',
+      kbId: 'default',
+      title: 'Virtual List Notes',
+      sourceType: 'markdown',
+      checksum: 'abc',
+      metadata: {
+        chunkCount: 1,
+        charCount: 22,
+      },
+      createdAt: 100,
+      updatedAt: 100,
+    })
+    await putKnowledgeChunks([
+      {
+        id: 'chunk-1',
+        kbId: 'default',
+        docId: 'doc-1',
+        text: '虚拟列表适合处理长列表渲染和滚动性能问题。',
+        keywords: ['虚拟列表', '虚拟', '列表', '滚动', '性能'],
+        metadata: {
+          charCount: 24,
+          sourceName: 'Virtual List Notes',
+          tokenCount: 14,
+        },
+      },
+      {
+        id: 'chunk-2',
+        kbId: 'other',
+        docId: 'doc-2',
+        text: '这个 chunk 属于另一个知识库。',
+        keywords: ['知识库'],
+        metadata: {
+          charCount: 16,
+          sourceName: 'Other',
+          tokenCount: 8,
+        },
+      },
+    ])
+
+    expect(await listKnowledgeDocuments('default')).toEqual([
+      expect.objectContaining({ id: 'doc-1', title: 'Virtual List Notes' }),
+    ])
+
+    expect(await searchKnowledgeChunks({
+      kbId: 'default',
+      query: '如何优化虚拟列表滚动性能',
+      topK: 2,
+    })).toEqual([
+      expect.objectContaining({ id: 'chunk-1' }),
+    ])
+  })
+})

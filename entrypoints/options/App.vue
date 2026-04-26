@@ -1,7 +1,17 @@
 <script setup lang="ts">
-import type { ProviderId, Settings } from '~/types'
+import type {
+  KnowledgeChunk,
+  KnowledgeDeleteResult,
+  KnowledgeDocument,
+  KnowledgeImportRequest,
+  KnowledgeImportResult,
+  KnowledgeSearchRequest,
+  ProviderId,
+  Settings,
+} from '~/types'
 import type { DiscoveredModel } from '~/utils/model-discovery'
 import { computed, onMounted, ref, watch } from 'vue'
+import { sendRuntimeMessage } from '~/utils/messages'
 import { buildModelsUrl, parseModelListResponse } from '~/utils/model-discovery'
 import {
   buildOpenAICompatibleHeaders,
@@ -10,6 +20,8 @@ import {
 } from '~/utils/openai-compatible'
 import { PROVIDER_ORDER, PROVIDER_PRESETS, resolveProviderPreset } from '~/utils/providers'
 import { DEFAULT_SETTINGS, DEFAULT_SYSTEM_PROMPT, loadSettings, saveSettings } from '~/utils/settings'
+
+const DEFAULT_KB_ID = 'default'
 
 const settings = ref<Settings>({ ...DEFAULT_SETTINGS })
 const loaded = ref(false)
@@ -22,6 +34,12 @@ const modelsError = ref('')
 const discoveredModels = ref<DiscoveredModel[]>([])
 const loadError = ref('')
 const hostsText = ref('')
+const importingKnowledge = ref(false)
+const knowledgeDocuments = ref<KnowledgeDocument[]>([])
+const knowledgeError = ref('')
+const knowledgeQuery = ref('')
+const knowledgeResults = ref<KnowledgeChunk[]>([])
+const searchingKnowledge = ref(false)
 
 const provider = computed(() => resolveProviderPreset(settings.value.provider))
 
@@ -30,6 +48,7 @@ onMounted(async () => {
     const stored = await loadSettings()
     settings.value = stored
     hostsText.value = stored.enabledHosts.join('\n')
+    await reloadKnowledgeDocuments()
   }
   catch (error) {
     loadError.value
@@ -170,6 +189,97 @@ function showToast(kind: 'ok' | 'err', text: string) {
   setTimeout(() => {
     toast.value = null
   }, 2400)
+}
+
+async function reloadKnowledgeDocuments() {
+  knowledgeDocuments.value = await sendRuntimeMessage<KnowledgeDocument[]>({
+    type: 'knowledge/list',
+    payload: { kbId: DEFAULT_KB_ID },
+  })
+}
+
+async function handleKnowledgeFiles(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = [...(input.files ?? [])]
+  input.value = ''
+  if (files.length === 0) {
+    return
+  }
+
+  importingKnowledge.value = true
+  knowledgeError.value = ''
+
+  try {
+    for (const file of files) {
+      const rawContent = await file.text()
+      const payload: KnowledgeImportRequest = {
+        kbId: DEFAULT_KB_ID,
+        rawContent,
+        sourceType: 'markdown',
+        title: file.name,
+      }
+      await sendRuntimeMessage<KnowledgeImportResult>({
+        type: 'knowledge/import',
+        payload,
+      })
+    }
+    await reloadKnowledgeDocuments()
+    showToast('ok', `Imported ${files.length} file${files.length > 1 ? 's' : ''}`)
+  }
+  catch (error) {
+    const message = error instanceof Error ? error.message : String(error)
+    knowledgeError.value = message
+    showToast('err', message)
+  }
+  finally {
+    importingKnowledge.value = false
+  }
+}
+
+async function removeKnowledgeDocument(docId: string) {
+  try {
+    await sendRuntimeMessage<KnowledgeDeleteResult>({
+      type: 'knowledge/delete',
+      payload: {
+        docId,
+        kbId: DEFAULT_KB_ID,
+      },
+    })
+    await reloadKnowledgeDocuments()
+    knowledgeResults.value = knowledgeResults.value.filter(chunk => chunk.docId !== docId)
+    showToast('ok', 'Document removed')
+  }
+  catch (error) {
+    showToast('err', error instanceof Error ? error.message : String(error))
+  }
+}
+
+async function runKnowledgeSearch() {
+  const query = knowledgeQuery.value.trim()
+  if (query.length === 0) {
+    knowledgeResults.value = []
+    return
+  }
+
+  searchingKnowledge.value = true
+  knowledgeError.value = ''
+  try {
+    const payload: KnowledgeSearchRequest = {
+      kbId: DEFAULT_KB_ID,
+      query,
+      topK: 5,
+    }
+    knowledgeResults.value = await sendRuntimeMessage<KnowledgeChunk[]>({
+      type: 'knowledge/search',
+      payload,
+    })
+  }
+  catch (error) {
+    knowledgeError.value = error instanceof Error ? error.message : String(error)
+  }
+  finally {
+    searchingKnowledge.value = false
+  }
 }
 </script>
 
@@ -372,6 +482,90 @@ function showToast(kind: 'ok' | 'err', text: string) {
           class="input h-auto py-2 font-mono text-xs"
           placeholder="chatgpt.com&#10;claude.ai&#10;gemini.google.com"
         />
+      </section>
+
+      <section class="card mb-6">
+        <div class="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 class="text-base font-semibold">Knowledge base</h2>
+            <p class="mt-1 text-sm text-neutral-500">
+              Import Markdown files for local chunking, storage, and retrieval debugging.
+            </p>
+          </div>
+          <label class="btn-ghost cursor-pointer">
+            <input
+              type="file"
+              multiple
+              accept=".md,.markdown,text/markdown"
+              class="hidden"
+              :disabled="importingKnowledge"
+              @change="handleKnowledgeFiles"
+            >
+            {{ importingKnowledge ? 'Importing…' : 'Import Markdown' }}
+          </label>
+        </div>
+
+        <div class="mb-4 flex flex-col gap-3 md:flex-row">
+          <input
+            v-model="knowledgeQuery"
+            class="input"
+            placeholder="Search imported knowledge…"
+            @keydown.enter.prevent="runKnowledgeSearch"
+          />
+          <button class="btn-ghost shrink-0" :disabled="searchingKnowledge" @click="runKnowledgeSearch">
+            {{ searchingKnowledge ? 'Searching…' : 'Search' }}
+          </button>
+        </div>
+
+        <div v-if="knowledgeError" class="mb-3 text-sm text-rose-600">
+          {{ knowledgeError }}
+        </div>
+
+        <div v-if="knowledgeResults.length" class="mb-4 rounded-xl border border-neutral-200 p-4">
+          <div class="mb-2 text-sm font-medium text-neutral-700">Search results</div>
+          <div class="space-y-3">
+            <div
+              v-for="chunk in knowledgeResults"
+              :key="chunk.id"
+              class="rounded-lg border border-neutral-100 bg-neutral-50 p-3"
+            >
+              <div class="mb-1 text-xs text-neutral-500">
+                {{ chunk.metadata.sourceName }} · {{ chunk.metadata.tokenCount }} tokens
+              </div>
+              <p class="text-sm leading-relaxed text-neutral-800">
+                {{ chunk.text }}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="mb-2 text-sm font-medium text-neutral-700">
+            Imported documents
+          </div>
+          <div v-if="knowledgeDocuments.length === 0" class="text-sm text-neutral-500">
+            No Markdown documents imported yet.
+          </div>
+          <div v-else class="space-y-3">
+            <div
+              v-for="doc in knowledgeDocuments"
+              :key="doc.id"
+              class="flex flex-col gap-3 rounded-xl border border-neutral-200 p-4 md:flex-row md:items-center md:justify-between"
+            >
+              <div>
+                <div class="font-medium text-neutral-900">
+                  {{ doc.title }}
+                </div>
+                <div class="mt-1 text-xs text-neutral-500">
+                  {{ doc.metadata.chunkCount }} chunks · {{ doc.metadata.charCount }} chars
+                </div>
+              </div>
+              <button class="btn-ghost text-rose-600 hover:bg-rose-50" @click="removeKnowledgeDocument(doc.id)">
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
       </section>
 
       <div
