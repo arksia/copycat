@@ -32,18 +32,18 @@ everywhere).
 
 ## Status
 
-This is **Phase 0** of the roadmap — a working skeleton:
+Current progress is best described as **Milestone 1-lite complete**:
 
-- ✅ Manifest V3 + WXT + Vue 3 + TypeScript
-- ✅ Ghost-text overlay for `<textarea>`, `<input>`, and `contenteditable`
-- ✅ Tab to accept, Esc to dismiss, typing-through-suggestion, IME-safe
-- ✅ OpenAI-compatible LLM client (Groq / OpenAI / DeepSeek / Ollama / custom)
-- ✅ Options UI for backend, model, prompt, debounce, host allowlist
-- ✅ Popup toggle (global / per-site)
-- ⏳ Phase 1 — ProseMirror adapter (ChatGPT, Claude) via CSS Custom Highlight API
-- ⏳ Phase 2 — On-device RAG with `transformers.js` + MeMemo + IndexedDB
-- ⏳ Phase 3 — Two-stage speculative completion, LRU cache, accept/reject logs
-- ⏳ Phase 4 — WebGPU local inference, DPO fine-tuning
+- ✅ Manifest V3 + WXT + Vue 3 + TypeScript baseline
+- ✅ Remote OpenAI-compatible completion path (Groq / OpenAI / DeepSeek / Ollama / custom)
+- ✅ Ghost-text autocomplete for native `<textarea>` / `<input>` surfaces
+- ✅ Tab accept, Esc dismiss, typing-through-suggestion, IME-safe request suppression
+- ✅ Options UI, popup toggle, playground, model discovery, debug preview
+- ✅ Extensible editor adapter layer, with current delivery priority on native text inputs
+- ⏳ Phase 1b — ProseMirror / richer editor adapter with CSS Highlight API-style native rendering
+- ⏳ Phase 2 — IndexedDB local data layer and knowledge ingestion / retrieval
+- ⏳ Phase 3 — Soul / Prompt Skills / telemetry and two-stage completion orchestration
+- ⏳ Phase 4 — WebGPU local inference as the default completion path
 
 See the [Design Doc](#design-notes) at the bottom for details.
 
@@ -79,10 +79,10 @@ After the extension loads:
 4. Click **Test connection** — you should see `Connected — reply: ok`.
 5. Open ChatGPT / Claude / Gemini, start typing, watch the ghost text appear.
 
-> On ChatGPT and Claude, the editor is ProseMirror — Phase 0 renders a
-> **floating overlay** positioned at the caret rather than inserting into the
-> editor's DOM. It works, but the Phase 1 ProseMirror adapter will feel more
-> native. See `utils/editor-adapter.ts`.
+> On ChatGPT and Claude, richer editors still rely on the generic overlay path.
+> Native `<textarea>` / `<input>` is the current primary target, while the
+> dedicated ProseMirror adapter remains a follow-up milestone. See
+> `utils/editor-adapter.ts`.
 
 ## Project layout
 
@@ -145,13 +145,10 @@ behaviour Cursor Tab uses and it keeps the suggestion from feeling
 See [`docs/roadmap.md`](./docs/roadmap.md) (created in Phase 1) for the full
 plan. Short version:
 
-1. **Phase 1** — ProseMirror + CSS Highlight API adapter; per-site profiles.
-2. **Phase 2** — Local RAG via `transformers.js` embedding + MeMemo HNSW, with
-   an Offscreen Document to dodge Service Worker sleep.
-3. **Phase 3** — Two-stage speculative completion; LRU cache; accept/reject
-   telemetry (local only, exportable).
-4. **Phase 4** — WebGPU on-device inference; team-shared knowledge bases;
-   slash-commands (`/api`, `/term`) for explicit retrieval.
+1. **Phase 1b** — ProseMirror + richer editor adapter, with more native ghost-text rendering.
+2. **Phase 2** — IndexedDB local data layer plus knowledge import, chunking, and retrieval.
+3. **Phase 3** — Two-stage completion, accept/reject telemetry, Soul / Prompt Skills groundwork.
+4. **Phase 4** — WebGPU on-device inference, with remote mode retained as an explicit fallback choice.
 
 ## License
 
