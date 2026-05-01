@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { CompletionResponse, Settings } from '~/types'
+import type { CompletionEvent, CompletionResponse, Settings } from '~/types'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   buildCompletionFingerprint,
@@ -240,6 +240,7 @@ function acceptSuggestion() {
   const textarea = getTextarea()
   const caret = getCaretIndex()
   const acceptedText = suggestion.value
+  const acceptedPrefix = previewPrefix.value
   const nextValue
     = draft.value.slice(0, caret) + acceptedText + draft.value.slice(caret)
   draft.value = nextValue
@@ -248,6 +249,11 @@ function acceptSuggestion() {
   infoText.value = 'Accepted the latest suggestion into the textarea.'
   lastLatencyMs.value = null
   lastFingerprint.value = ''
+  emitCompletionEvent({
+    action: 'accepted',
+    prefix: acceptedPrefix,
+    suggestion: acceptedText,
+  })
 
   requestAnimationFrame(() => {
     if (!textarea)
@@ -267,6 +273,11 @@ function handleKeydown(event: KeyboardEvent) {
   }
   if (event.key === 'Escape' && suggestion.value) {
     event.preventDefault()
+    emitCompletionEvent({
+      action: 'rejected',
+      prefix: previewPrefix.value,
+      suggestion: suggestion.value,
+    })
     suggestion.value = ''
     errorText.value = ''
     infoText.value = 'Dismissed the latest suggestion.'
@@ -274,7 +285,35 @@ function handleKeydown(event: KeyboardEvent) {
   }
 }
 
+function emitCompletionEvent(args: {
+  action: CompletionEvent['action']
+  prefix: string
+  suggestion: string
+}) {
+  const event: CompletionEvent = {
+    id: nextId('play-evt'),
+    prefix: args.prefix,
+    suggestion: args.suggestion,
+    action: args.action,
+    latencyMs: lastLatencyMs.value ?? 0,
+    timestamp: Date.now(),
+    host: 'playground',
+  }
+
+  void sendRuntimeMessage<void>({
+    type: 'completion/event',
+    payload: event,
+  }).catch(() => {})
+}
+
 function clearAll() {
+  if (suggestion.value) {
+    emitCompletionEvent({
+      action: 'ignored',
+      prefix: previewPrefix.value,
+      suggestion: suggestion.value,
+    })
+  }
   draft.value = ''
   suggestion.value = ''
   errorText.value = ''

@@ -60,6 +60,11 @@ describe('buildCompletionDebugInfo', () => {
       telemetry: {
         host: 'chatgpt.com',
         stats: telemetry,
+        qualitySignal: {
+          band: 'mixed',
+          shouldBoostKnowledge: false,
+          reason: 'Recent completions are inconsistent and may need closer review.',
+        },
       },
     })
   })

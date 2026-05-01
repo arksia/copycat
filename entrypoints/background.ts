@@ -28,6 +28,7 @@ import {
   searchKnowledgeChunks,
 } from '~/utils/db/repositories/knowledge'
 import { buildCompletionDebugInfo } from '~/utils/debug'
+import { resolveKnowledgeRetrievalBudget } from '~/utils/knowledge-budget'
 import {
   buildKnowledgeContext,
   buildKnowledgeSearchQuery,
@@ -205,7 +206,46 @@ export default defineBackground(() => {
       throw new Error('Missing base URL. Please open the settings page to configure Copycat.')
     }
 
-    const knowledgeResolution = await resolveCompletionKnowledge(req, settings.minPrefixChars)
+    const telemetryHost = resolveTelemetryHostFromRequest(req)
+    const telemetryStats
+      = telemetryHost !== null && telemetryHost.length > 0
+        ? await getCompletionEventStats(telemetryHost)
+        : null
+    const qualitySignal = telemetryStats === null
+      ? undefined
+      : telemetryStats.total < 5
+        ? {
+            band: 'insufficient_data' as const,
+            shouldBoostKnowledge: false,
+            reason: 'Not enough local completion history yet.',
+          }
+        : telemetryStats.acceptanceRate >= 0.6
+          ? {
+              band: 'healthy' as const,
+              shouldBoostKnowledge: false,
+              reason: 'Recent completions are being accepted consistently.',
+            }
+          : telemetryStats.acceptanceRate >= 0.3
+            ? {
+                band: 'mixed' as const,
+                shouldBoostKnowledge: false,
+                reason: 'Recent completions are inconsistent and may need closer review.',
+              }
+            : {
+                band: 'poor' as const,
+                shouldBoostKnowledge: true,
+                reason: 'Recent completions are often rejected or ignored.',
+              }
+    const knowledgeBudget = resolveKnowledgeRetrievalBudget({
+      baseTopK: knowledgeTopK,
+      baseMaxChars: knowledgeContextMaxChars,
+      qualitySignal,
+    })
+    const knowledgeResolution = await resolveCompletionKnowledge(
+      req,
+      settings.minPrefixChars,
+      knowledgeBudget,
+    )
     const completionContext = mergeCompletionContext(req.context, knowledgeResolution.context)
     const cacheKey = buildCompletionCacheKey({
       provider: settings.provider,
@@ -246,9 +286,6 @@ export default defineBackground(() => {
 
     const start = performance.now()
     try {
-      const telemetryStats = req.debug
-        ? await getCompletionEventStats('playground')
-        : null
       const detailed = req.debug
         ? await completeOnceDetailed({
             prefix: req.prefix,
@@ -290,7 +327,7 @@ export default defineBackground(() => {
           telemetry: telemetryStats === null
             ? undefined
             : {
-                host: 'playground',
+                host: telemetryHost ?? 'unknown',
                 stats: telemetryStats,
               },
         }),
@@ -463,6 +500,10 @@ export default defineBackground(() => {
   async function resolveCompletionKnowledge(
     req: CompletionRequest,
     minPrefixChars: number,
+    budget: {
+      topK: number
+      maxChars: number
+    },
   ): Promise<{
     chunks: KnowledgeChunk[]
     context?: string
@@ -481,12 +522,12 @@ export default defineBackground(() => {
       const chunks = await searchKnowledgeChunks({
         kbId: defaultKnowledgeBaseId,
         query,
-        topK: knowledgeTopK,
+        topK: budget.topK,
       })
       const packedKnowledge = buildKnowledgeContext({
         chunks,
-        maxChars: knowledgeContextMaxChars,
-        maxChunks: knowledgeTopK,
+        maxChars: budget.maxChars,
+        maxChunks: budget.topK,
       })
 
       if (packedKnowledge.length > 0) {
@@ -513,5 +554,12 @@ export default defineBackground(() => {
       .map(part => part.trim())
 
     return parts.length > 0 ? parts.join('\n\n') : undefined
+  }
+
+  function resolveTelemetryHostFromRequest(req: CompletionRequest): string | null {
+    if (req.signalKey !== undefined && req.signalKey.length > 0 && req.signalKey.includes('::')) {
+      return req.signalKey.split('::')[0] ?? null
+    }
+    return null
   }
 })

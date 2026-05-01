@@ -48,6 +48,11 @@ export interface CompletionDebugInfo {
   telemetry?: {
     host: string
     stats: CompletionEventStats
+    qualitySignal: {
+      band: 'healthy' | 'insufficient_data' | 'mixed' | 'poor'
+      shouldBoostKnowledge: boolean
+      reason: string
+    }
   }
   requestBody: {
     systemPrompt: string

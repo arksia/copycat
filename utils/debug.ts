@@ -4,6 +4,7 @@ import type {
   CompletionResponse,
   KnowledgeChunk,
 } from '~/types'
+import { deriveCompletionQualitySignal } from './quality-signal'
 
 /**
  * Inputs required to build one structured completion debug payload.
@@ -57,6 +58,11 @@ export function buildCompletionDebugInfo(
     })),
     knowledgeContext: args.knowledgeResolution.context,
     knowledgeQuery: args.knowledgeResolution.query,
-    telemetry: args.telemetry,
+    telemetry: args.telemetry === undefined
+      ? undefined
+      : {
+          ...args.telemetry,
+          qualitySignal: deriveCompletionQualitySignal(args.telemetry.stats),
+        },
   }
 }
