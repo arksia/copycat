@@ -45,6 +45,10 @@ export interface CompletionDebugInfo {
     sourceName: string
     text: string
   }>
+  telemetry?: {
+    host: string
+    stats: CompletionEventStats
+  }
   requestBody: {
     systemPrompt: string
     userPrompt: string
@@ -82,6 +86,8 @@ export type RuntimeMessage
   = | { type: 'completion/request', payload: CompletionRequest }
     | { type: 'completion/cancel', payload: { id: string } }
     | { type: 'completion/event', payload: CompletionEvent }
+    | { type: 'completion/events/recent', payload: { host: string, limit?: number } }
+    | { type: 'completion/events/stats', payload: { host: string } }
     | { type: 'knowledge/delete', payload: { docId: string, kbId: string } }
     | { type: 'knowledge/import', payload: KnowledgeImportRequest }
     | { type: 'knowledge/list', payload: { kbId: string } }
@@ -97,6 +103,15 @@ export interface CompletionEvent {
   latencyMs: number
   timestamp: number
   host: string
+}
+
+export interface CompletionEventStats {
+  total: number
+  accepted: number
+  rejected: number
+  ignored: number
+  acceptanceRate: number
+  averageLatencyMs: number
 }
 
 export type KnowledgeSourceType = 'html' | 'manual' | 'markdown' | 'txt'

@@ -39,6 +39,7 @@ const debugKnowledgeChunks = ref<Array<{
   sourceName: string
   text: string
 }>>([])
+const debugTelemetry = ref('')
 const lastRequestId = ref('')
 const lastLatencyMs = ref<number | null>(null)
 const settings = ref<Settings | null>(null)
@@ -186,6 +187,9 @@ async function requestCompletion() {
     debugKnowledgeContext.value = response?.debug?.knowledgeContext ?? ''
     debugKnowledgeQuery.value = response?.debug?.knowledgeQuery ?? ''
     debugKnowledgeChunks.value = response?.debug?.knowledgeChunks ?? []
+    debugTelemetry.value = response?.debug?.telemetry
+      ? JSON.stringify(response.debug.telemetry, null, 2)
+      : ''
     queueGhostSync()
     if (!suggestion.value) {
       infoText.value
@@ -200,6 +204,7 @@ async function requestCompletion() {
     debugKnowledgeContext.value = ''
     debugKnowledgeQuery.value = ''
     debugKnowledgeChunks.value = []
+    debugTelemetry.value = ''
     queueGhostSync()
   }
   finally {
@@ -279,6 +284,7 @@ function clearAll() {
   debugRawChoice.value = ''
   debugUserPrompt.value = ''
   debugSystemPrompt.value = ''
+  debugTelemetry.value = ''
   lastRequestId.value = ''
   lastLatencyMs.value = null
   lastFingerprint.value = ''
@@ -492,6 +498,12 @@ function openOptions() {
                   Knowledge chunks
                 </div>
                 <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeChunks.length ? JSON.stringify(debugKnowledgeChunks, null, 2) : '(empty)' }}</pre>
+              </div>
+              <div>
+                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  Telemetry
+                </div>
+                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugTelemetry || '(empty)' }}</pre>
               </div>
               <div>
                 <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">

@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import type {
+  CompletionEvent,
+  CompletionEventStats,
   KnowledgeChunk,
   KnowledgeDeleteResult,
   KnowledgeDocument,
@@ -20,6 +22,7 @@ import {
 } from '~/utils/openai-compatible'
 import { PROVIDER_ORDER, PROVIDER_PRESETS, resolveProviderPreset } from '~/utils/providers'
 import { DEFAULT_SETTINGS, DEFAULT_SYSTEM_PROMPT, loadSettings, saveSettings } from '~/utils/settings'
+import { loadTelemetrySnapshot } from '~/utils/telemetry'
 
 const DEFAULT_KB_ID = 'default'
 
@@ -40,6 +43,11 @@ const knowledgeError = ref('')
 const knowledgeQuery = ref('')
 const knowledgeResults = ref<KnowledgeChunk[]>([])
 const searchingKnowledge = ref(false)
+const telemetryHost = ref('')
+const telemetryEvents = ref<CompletionEvent[]>([])
+const telemetryStats = ref<CompletionEventStats | null>(null)
+const telemetryError = ref('')
+const loadingTelemetry = ref(false)
 
 const provider = computed(() => resolveProviderPreset(settings.value.provider))
 
@@ -57,6 +65,8 @@ onMounted(async () => {
     hostsText.value = DEFAULT_SETTINGS.enabledHosts.join('\n')
   }
   finally {
+    telemetryHost.value = await resolveTelemetryHost()
+    await reloadTelemetry()
     loaded.value = true
   }
 })
@@ -196,6 +206,43 @@ async function reloadKnowledgeDocuments() {
     type: 'knowledge/list',
     payload: { kbId: DEFAULT_KB_ID },
   })
+}
+
+async function resolveTelemetryHost() {
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true })
+  try {
+    return tab?.url ? new URL(tab.url).host : ''
+  }
+  catch {
+    return ''
+  }
+}
+
+async function reloadTelemetry() {
+  loadingTelemetry.value = true
+
+  try {
+    const snapshot = await loadTelemetrySnapshot({
+      host: telemetryHost.value,
+      loadStats: () =>
+        sendRuntimeMessage<CompletionEventStats>({
+          type: 'completion/events/stats',
+          payload: { host: telemetryHost.value },
+        }),
+      loadEvents: () =>
+        sendRuntimeMessage<CompletionEvent[]>({
+          type: 'completion/events/recent',
+          payload: { host: telemetryHost.value, limit: 8 },
+        }),
+    })
+
+    telemetryStats.value = snapshot.stats
+    telemetryEvents.value = snapshot.events
+    telemetryError.value = snapshot.error
+  }
+  finally {
+    loadingTelemetry.value = false
+  }
 }
 
 async function handleKnowledgeFiles(event: Event) {
@@ -566,6 +613,102 @@ async function runKnowledgeSearch() {
             </div>
           </div>
         </div>
+      </section>
+
+      <section class="card mb-6">
+        <div class="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 class="text-base font-semibold">Local telemetry</h2>
+            <p class="mt-1 text-sm text-neutral-500">
+              Recent completion outcomes stored locally for the current site.
+            </p>
+          </div>
+          <button class="btn-ghost" :disabled="loadingTelemetry" @click="reloadTelemetry">
+            {{ loadingTelemetry ? 'Refreshing…' : 'Refresh' }}
+          </button>
+        </div>
+
+        <p v-if="telemetryHost" class="mb-4 text-sm text-neutral-600">
+          Current host:
+          <code class="rounded bg-neutral-100 px-1 py-0.5">{{ telemetryHost }}</code>
+        </p>
+        <p v-else class="mb-4 text-sm text-neutral-500">
+          No active browser tab host was detected.
+        </p>
+
+        <div v-if="telemetryError" class="mb-3 text-sm text-rose-600">
+          {{ telemetryError }}
+        </div>
+
+        <template v-if="telemetryStats">
+          <div class="mb-4 grid grid-cols-2 gap-3 md:grid-cols-3">
+            <div class="rounded-lg border border-neutral-200 px-3 py-2">
+              <div class="text-xs text-neutral-500">Total</div>
+              <div class="mt-1 text-lg font-semibold">{{ telemetryStats.total }}</div>
+            </div>
+            <div class="rounded-lg border border-neutral-200 px-3 py-2">
+              <div class="text-xs text-neutral-500">Accepted</div>
+              <div class="mt-1 text-lg font-semibold text-emerald-600">{{ telemetryStats.accepted }}</div>
+            </div>
+            <div class="rounded-lg border border-neutral-200 px-3 py-2">
+              <div class="text-xs text-neutral-500">Rejected</div>
+              <div class="mt-1 text-lg font-semibold text-rose-600">{{ telemetryStats.rejected }}</div>
+            </div>
+            <div class="rounded-lg border border-neutral-200 px-3 py-2">
+              <div class="text-xs text-neutral-500">Ignored</div>
+              <div class="mt-1 text-lg font-semibold">{{ telemetryStats.ignored }}</div>
+            </div>
+            <div class="rounded-lg border border-neutral-200 px-3 py-2">
+              <div class="text-xs text-neutral-500">Acceptance rate</div>
+              <div class="mt-1 text-lg font-semibold">{{ Math.round(telemetryStats.acceptanceRate * 100) }}%</div>
+            </div>
+            <div class="rounded-lg border border-neutral-200 px-3 py-2">
+              <div class="text-xs text-neutral-500">Avg latency</div>
+              <div class="mt-1 text-lg font-semibold">{{ telemetryStats.averageLatencyMs }} ms</div>
+            </div>
+          </div>
+
+          <div class="space-y-3">
+            <div
+              v-for="event in telemetryEvents"
+              :key="event.id"
+              class="rounded-lg border border-neutral-200 px-3 py-3"
+            >
+              <div class="mb-2 flex items-center justify-between gap-3">
+                <span
+                  class="rounded-full px-2 py-0.5 text-xs font-medium"
+                  :class="{
+                    'bg-emerald-50 text-emerald-700': event.action === 'accepted',
+                    'bg-rose-50 text-rose-700': event.action === 'rejected',
+                    'bg-neutral-100 text-neutral-700': event.action === 'ignored',
+                  }"
+                >
+                  {{ event.action }}
+                </span>
+                <span class="text-xs text-neutral-500">{{ event.latencyMs }} ms</span>
+              </div>
+
+              <div class="space-y-2 text-sm">
+                <div>
+                  <div class="mb-1 text-xs text-neutral-500">Prefix</div>
+                  <p class="whitespace-pre-wrap rounded bg-neutral-50 px-2 py-1 font-mono text-xs text-neutral-700">
+                    {{ event.prefix }}
+                  </p>
+                </div>
+                <div>
+                  <div class="mb-1 text-xs text-neutral-500">Suggestion</div>
+                  <p class="whitespace-pre-wrap rounded bg-neutral-50 px-2 py-1 font-mono text-xs text-neutral-700">
+                    {{ event.suggestion }}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <p v-if="telemetryEvents.length === 0" class="text-sm text-neutral-500">
+              No completion events recorded for this host yet.
+            </p>
+          </div>
+        </template>
       </section>
 
       <div

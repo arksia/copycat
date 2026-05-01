@@ -6,6 +6,7 @@ import {
   putPersistedCompletion,
 } from '~/utils/db/repositories/completions'
 import {
+  getCompletionEventStats,
   listRecentCompletionEventsByHost,
   putCompletionEvent,
 } from '~/utils/db/repositories/events'
@@ -57,6 +58,60 @@ describe('indexeddb repositories', () => {
     const events = await listRecentCompletionEventsByHost('chatgpt.com', 5)
 
     expect(events).toEqual([newerEvent, olderEvent])
+  })
+
+  it('aggregates completion event stats for one host', async () => {
+    const events: CompletionEvent[] = [
+      {
+        id: 'evt-1',
+        prefix: '我需要构建一个博客系统',
+        suggestion: '，支持评论功能。',
+        action: 'accepted',
+        latencyMs: 120,
+        timestamp: 100,
+        host: 'chatgpt.com',
+      },
+      {
+        id: 'evt-2',
+        prefix: '我需要构建一个博客系统',
+        suggestion: '，支持标签管理。',
+        action: 'accepted',
+        latencyMs: 180,
+        timestamp: 200,
+        host: 'chatgpt.com',
+      },
+      {
+        id: 'evt-3',
+        prefix: '我需要构建一个博客系统',
+        suggestion: '，支持 RSS 订阅。',
+        action: 'rejected',
+        latencyMs: 80,
+        timestamp: 300,
+        host: 'chatgpt.com',
+      },
+      {
+        id: 'evt-4',
+        prefix: 'hello',
+        suggestion: ' world',
+        action: 'ignored',
+        latencyMs: 60,
+        timestamp: 400,
+        host: 'claude.ai',
+      },
+    ]
+
+    for (const event of events) {
+      await putCompletionEvent(event)
+    }
+
+    expect(await getCompletionEventStats('chatgpt.com')).toEqual({
+      total: 3,
+      accepted: 2,
+      rejected: 1,
+      ignored: 0,
+      acceptanceRate: 0.67,
+      averageLatencyMs: 127,
+    })
   })
 
   it('returns persisted completions while fresh and evicts them after expiry', async () => {

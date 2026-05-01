@@ -1,5 +1,6 @@
 import type {
   CompletionError,
+  CompletionEventStats,
   CompletionRequest,
   CompletionResponse,
   KnowledgeChunk,
@@ -14,7 +15,11 @@ import {
   DEFAULT_COMPLETION_CACHE_TTL_MS,
 } from '~/utils/completion-cache'
 import { getPersistedCompletion, putPersistedCompletion } from '~/utils/db/repositories/completions'
-import { putCompletionEvent } from '~/utils/db/repositories/events'
+import {
+  getCompletionEventStats,
+  listRecentCompletionEventsByHost,
+  putCompletionEvent,
+} from '~/utils/db/repositories/events'
 import {
   deleteKnowledgeDocument,
   listKnowledgeDocuments,
@@ -22,6 +27,7 @@ import {
   putKnowledgeDocument,
   searchKnowledgeChunks,
 } from '~/utils/db/repositories/knowledge'
+import { buildCompletionDebugInfo } from '~/utils/debug'
 import {
   buildKnowledgeContext,
   buildKnowledgeSearchQuery,
@@ -101,6 +107,32 @@ export default defineBackground(() => {
         })
         sendResponse({ ok: true })
         return false
+
+      case 'completion/events/recent':
+        void listRecentCompletionEventsByHost(message.payload.host, message.payload.limit)
+          .then(result => sendResponse({ ok: true, data: result }))
+          .catch((error: unknown) => {
+            sendResponse({
+              ok: false,
+              error: {
+                error: error instanceof Error ? error.message : String(error),
+              },
+            })
+          })
+        return true
+
+      case 'completion/events/stats':
+        void getCompletionEventStats(message.payload.host)
+          .then((result: CompletionEventStats) => sendResponse({ ok: true, data: result }))
+          .catch((error: unknown) => {
+            sendResponse({
+              ok: false,
+              error: {
+                error: error instanceof Error ? error.message : String(error),
+              },
+            })
+          })
+        return true
 
       case 'knowledge/delete':
         void handleKnowledgeDelete(message.payload)
@@ -214,6 +246,9 @@ export default defineBackground(() => {
 
     const start = performance.now()
     try {
+      const telemetryStats = req.debug
+        ? await getCompletionEventStats('playground')
+        : null
       const detailed = req.debug
         ? await completeOnceDetailed({
             prefix: req.prefix,
@@ -250,7 +285,15 @@ export default defineBackground(() => {
         latencyMs: Math.round(performance.now() - start),
         provider: settings.provider,
         model: settings.model,
-        debug: buildCompletionDebugInfo(detailed.debug, knowledgeResolution),
+        debug: buildCompletionDebugInfo(detailed.debug, {
+          knowledgeResolution,
+          telemetry: telemetryStats === null
+            ? undefined
+            : {
+                host: 'playground',
+                stats: telemetryStats,
+              },
+        }),
       }
     }
     catch (error) {
@@ -470,29 +513,5 @@ export default defineBackground(() => {
       .map(part => part.trim())
 
     return parts.length > 0 ? parts.join('\n\n') : undefined
-  }
-
-  function buildCompletionDebugInfo(
-    debug: CompletionResponse['debug'],
-    knowledgeResolution: {
-      chunks: KnowledgeChunk[]
-      context?: string
-      query?: string
-    },
-  ): CompletionResponse['debug'] {
-    if (debug === undefined) {
-      return undefined
-    }
-
-    return {
-      ...debug,
-      knowledgeChunks: knowledgeResolution.chunks.map(chunk => ({
-        id: chunk.id,
-        sourceName: chunk.metadata.sourceName,
-        text: chunk.text,
-      })),
-      knowledgeContext: knowledgeResolution.context,
-      knowledgeQuery: knowledgeResolution.query,
-    }
   }
 })

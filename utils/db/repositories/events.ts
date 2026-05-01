@@ -1,4 +1,4 @@
-import type { CompletionEvent } from '~/types'
+import type { CompletionEvent, CompletionEventStats } from '~/types'
 import { openCopycatDb, transactionToPromise } from '../client'
 import { DB_INDEXES, DB_STORES } from '../schema'
 
@@ -55,6 +55,61 @@ export async function listRecentCompletionEventsByHost(
 
   await transactionToPromise(transaction)
   return events
+}
+
+/**
+ * Aggregates recent completion outcomes for one host into a compact local telemetry summary.
+ *
+ * Use when:
+ * - settings or popup surfaces need a quick health check for one site
+ * - later learning logic needs lightweight acceptance signals without scanning full raw events repeatedly
+ *
+ * Expects:
+ * - `host` to be the current page hostname
+ *
+ * Returns:
+ * - total counts, acceptance rate, and average latency for that host
+ */
+export async function getCompletionEventStats(host: string): Promise<CompletionEventStats> {
+  const events = await listRecentCompletionEventsByHost(host, 200)
+  if (events.length === 0) {
+    return {
+      total: 0,
+      accepted: 0,
+      rejected: 0,
+      ignored: 0,
+      acceptanceRate: 0,
+      averageLatencyMs: 0,
+    }
+  }
+
+  let accepted = 0
+  let rejected = 0
+  let ignored = 0
+  let totalLatency = 0
+
+  for (const event of events) {
+    totalLatency += event.latencyMs
+
+    if (event.action === 'accepted') {
+      accepted += 1
+      continue
+    }
+    if (event.action === 'rejected') {
+      rejected += 1
+      continue
+    }
+    ignored += 1
+  }
+
+  return {
+    total: events.length,
+    accepted,
+    rejected,
+    ignored,
+    acceptanceRate: Number((accepted / events.length).toFixed(2)),
+    averageLatencyMs: Math.round(totalLatency / events.length),
+  }
 }
 
 async function collectCursorValues<T>(
