@@ -38,6 +38,12 @@ export interface CompletionDebugInfo {
   sanitizedCompletion: string
   rawChoice: string
   cacheHit: boolean
+  appliedStrategy?: {
+    knowledgeBudget: {
+      topK: number
+      maxChars: number
+    }
+  }
   knowledgeContext?: string
   knowledgeQuery?: string
   knowledgeChunks?: Array<{

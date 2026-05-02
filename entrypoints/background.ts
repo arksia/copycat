@@ -323,6 +323,9 @@ export default defineBackground(() => {
         provider: settings.provider,
         model: settings.model,
         debug: buildCompletionDebugInfo(detailed.debug, {
+          appliedStrategy: {
+            knowledgeBudget,
+          },
           knowledgeResolution,
           telemetry: telemetryStats === null
             ? undefined

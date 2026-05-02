@@ -17,6 +17,12 @@ import { deriveCompletionQualitySignal } from './quality-signal'
  * - the extra debug context merged around the base completion debug payload
  */
 export interface BuildCompletionDebugInfoArgs {
+  appliedStrategy: {
+    knowledgeBudget: {
+      topK: number
+      maxChars: number
+    }
+  }
   knowledgeResolution: {
     chunks: KnowledgeChunk[]
     context?: string
@@ -51,6 +57,7 @@ export function buildCompletionDebugInfo(
 
   return {
     ...debug,
+    appliedStrategy: args.appliedStrategy,
     knowledgeChunks: args.knowledgeResolution.chunks.map(chunk => ({
       id: chunk.id,
       sourceName: chunk.metadata.sourceName,

@@ -39,6 +39,7 @@ const debugKnowledgeChunks = ref<Array<{
   sourceName: string
   text: string
 }>>([])
+const debugAppliedStrategy = ref('')
 const debugTelemetry = ref('')
 const lastRequestId = ref('')
 const lastLatencyMs = ref<number | null>(null)
@@ -184,6 +185,9 @@ async function requestCompletion() {
     debugRawChoice.value = response?.debug?.rawChoice ?? ''
     debugUserPrompt.value = response?.debug?.requestBody.userPrompt ?? ''
     debugSystemPrompt.value = response?.debug?.requestBody.systemPrompt ?? ''
+    debugAppliedStrategy.value = response?.debug?.appliedStrategy
+      ? JSON.stringify(response.debug.appliedStrategy, null, 2)
+      : ''
     debugKnowledgeContext.value = response?.debug?.knowledgeContext ?? ''
     debugKnowledgeQuery.value = response?.debug?.knowledgeQuery ?? ''
     debugKnowledgeChunks.value = response?.debug?.knowledgeChunks ?? []
@@ -201,6 +205,7 @@ async function requestCompletion() {
       return
     errorText.value = error instanceof Error ? error.message : String(error)
     suggestion.value = ''
+    debugAppliedStrategy.value = ''
     debugKnowledgeContext.value = ''
     debugKnowledgeQuery.value = ''
     debugKnowledgeChunks.value = []
@@ -323,6 +328,7 @@ function clearAll() {
   debugRawChoice.value = ''
   debugUserPrompt.value = ''
   debugSystemPrompt.value = ''
+  debugAppliedStrategy.value = ''
   debugTelemetry.value = ''
   lastRequestId.value = ''
   lastLatencyMs.value = null
@@ -519,6 +525,12 @@ function openOptions() {
                   Last info
                 </div>
                 <pre class="overflow-auto rounded-md bg-sky-50 p-3 text-xs text-sky-800">{{ infoText }}</pre>
+              </div>
+              <div>
+                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  Applied strategy
+                </div>
+                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugAppliedStrategy || '(empty)' }}</pre>
               </div>
               <div>
                 <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">

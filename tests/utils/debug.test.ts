@@ -24,6 +24,12 @@ describe('buildCompletionDebugInfo', () => {
     }
 
     expect(buildCompletionDebugInfo(baseDebug, {
+      appliedStrategy: {
+        knowledgeBudget: {
+          topK: 3,
+          maxChars: 1200,
+        },
+      },
       knowledgeResolution: {
         query: '虚拟列表',
         context: '[Knowledge]\n虚拟列表适合处理长列表渲染。',
@@ -48,6 +54,12 @@ describe('buildCompletionDebugInfo', () => {
       },
     })).toEqual({
       ...baseDebug,
+      appliedStrategy: {
+        knowledgeBudget: {
+          topK: 3,
+          maxChars: 1200,
+        },
+      },
       knowledgeQuery: '虚拟列表',
       knowledgeContext: '[Knowledge]\n虚拟列表适合处理长列表渲染。',
       knowledgeChunks: [
@@ -71,6 +83,12 @@ describe('buildCompletionDebugInfo', () => {
 
   it('returns undefined when the base debug payload is absent', () => {
     expect(buildCompletionDebugInfo(undefined, {
+      appliedStrategy: {
+        knowledgeBudget: {
+          topK: 2,
+          maxChars: 900,
+        },
+      },
       knowledgeResolution: {
         chunks: [],
       },
