@@ -28,21 +28,23 @@ everywhere).
 | Uses **your** docs for grounding | no | no | **yes (RAG)** |
 | Multiple project knowledge bases | no | no | **yes** |
 | Pick your own LLM backend | no | Gemini Nano only | **Groq / OpenAI / DeepSeek / Ollama / custom** |
-| Two-stage speculative completion | no | no | planned |
+| Staged completion orchestration | no | no | **yes** |
 
 ## Status
 
-Current progress is best described as **Milestone 1-lite complete**:
+Current progress is best described as **Phase 3 in progress**:
 
 - ✅ Manifest V3 + WXT + Vue 3 + TypeScript baseline
 - ✅ Remote OpenAI-compatible completion path (Groq / OpenAI / DeepSeek / Ollama / custom)
 - ✅ Ghost-text autocomplete for native `<textarea>` / `<input>` surfaces
 - ✅ Tab accept, Esc dismiss, typing-through-suggestion, IME-safe request suppression
 - ✅ Options UI, popup toggle, playground, model discovery, debug preview
+- ✅ IndexedDB local completion cache, telemetry store, and knowledge document storage
+- ✅ Markdown knowledge import, chunking, lexical retrieval, and prompt packing
 - ✅ Extensible editor adapter layer, with current delivery priority on native text inputs
+- ✅ Staged completion flow plus local telemetry-driven retrieval budget tuning
 - ⏳ Phase 1b — ProseMirror / richer editor adapter with CSS Highlight API-style native rendering
-- ⏳ Phase 2 — IndexedDB local data layer and knowledge ingestion / retrieval
-- ⏳ Phase 3 — Soul / Prompt Skills / telemetry and staged completion orchestration
+- ⏳ Phase 3 — Soul / Prompt Skills / richer retrieval beyond lexical matching
 - ⏳ Phase 4 — WebGPU local inference as the default completion path
 
 See the [Design Doc](#design-notes) at the bottom for details.
@@ -91,16 +93,21 @@ copycat/
 ├── entrypoints/
 │   ├── background.ts       # MV3 service worker — LLM request broker
 │   ├── content.ts          # Content script — input hijacking & orchestration
+│   ├── offscreen/          # Knowledge import worker surface
 │   ├── options/            # Vue 3 options page
+│   ├── playground/         # Isolated completion playground
 │   └── popup/              # Vue 3 toolbar popup
 ├── utils/
+│   ├── completion/         # Completion cache, client, staging, telemetry, debug
+│   ├── core/               # Shared base/runtime helpers
+│   ├── db/                 # IndexedDB schema and repositories
+│   ├── knowledge/          # Import, normalize, chunk, retrieve, prompt packing
 │   ├── editor-adapter.ts   # textarea / input / contenteditable adapters
-│   ├── ghost-text.ts       # Floating overlay renderer
-│   ├── llm.ts              # OpenAI-compatible client
+│   ├── ghost-text.ts       # Overlay renderer + playground sync
+│   ├── knowledge-budget.ts # Retrieval budget tuning from telemetry quality
+│   ├── openai-compatible.ts# OpenAI-compatible host helpers
 │   ├── providers.ts        # Groq / OpenAI / DeepSeek / Ollama presets
-│   ├── settings.ts         # chrome.storage.local schema & helpers
-│   ├── debounce.ts
-│   └── id.ts
+│   └── settings.ts         # chrome.storage.local schema & helpers
 ├── types/index.ts          # Shared types
 ├── assets/tailwind.css     # Styles
 ├── wxt.config.ts           # Manifest + build config
@@ -142,12 +149,11 @@ behaviour Cursor Tab uses and it keeps the suggestion from feeling
 
 ## Roadmap
 
-See [`docs/roadmap.md`](./docs/roadmap.md) (created in Phase 1) for the full
+See [`docs/roadmap.md`](./docs/roadmap.md) for the full
 plan. Short version:
 
 1. **Phase 1b** — ProseMirror + richer editor adapter, with more native ghost-text rendering.
-2. **Phase 2** — IndexedDB local data layer plus knowledge import, chunking, and retrieval.
-3. **Phase 3** — Two-stage completion, accept/reject telemetry, Soul / Prompt Skills groundwork.
+2. **Phase 3** — Richer retrieval, Soul / Prompt Skills, and better grounding quality.
 4. **Phase 4** — WebGPU on-device inference, with remote mode retained as an explicit fallback choice.
 
 ## License
