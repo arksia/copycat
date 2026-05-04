@@ -33,7 +33,7 @@ export interface CompleteArgs {
  * - the caller needs both the final completion and debug metadata
  *
  * Expects:
- * - `completion` to already be sanitized for inline use
+ * - `completion` to match the model output returned for the current request
  *
  * Returns:
  * - the final text plus request/response debug details
@@ -66,7 +66,7 @@ interface ChatCompletionBody {
 }
 
 /**
- * Requests a single sanitized inline completion string.
+ * Requests a single inline completion string.
  *
  * Use when:
  * - the caller only needs the final continuation text
@@ -76,7 +76,7 @@ interface ChatCompletionBody {
  * - `args.settings` to contain a usable base URL, model, and prompt settings
  *
  * Returns:
- * - the sanitized continuation text ready for inline insertion
+ * - the continuation text returned by the model
  */
 export async function completeOnce(args: CompleteArgs): Promise<string> {
   const result = await completeOnceDetailed(args)
@@ -88,14 +88,14 @@ export async function completeOnce(args: CompleteArgs): Promise<string> {
  *
  * Use when:
  * - a surface such as the playground needs to inspect prompt and raw model output
- * - the caller wants the sanitized completion plus request diagnostics
+ * - the caller wants the returned completion plus request diagnostics
  *
  * Expects:
  * - `prefix` to represent the text before the cursor
  * - `settings` to point at an OpenAI-compatible chat completions endpoint
  *
  * Returns:
- * - the sanitized completion and structured debug information for the request
+ * - the returned completion and structured debug information for the request
  */
 export async function completeOnceDetailed({
   prefix,
@@ -129,7 +129,7 @@ export async function completeOnceDetailed({
   const json = (await res.json()) as { choices?: ChatChoice[] }
   const choice = json.choices?.[0]
   const rawCompletion = extractRawCompletion(choice)
-  const completion = sanitizeCompletion(rawCompletion, prefix)
+  const completion = rawCompletion
 
   return {
     completion,
@@ -216,42 +216,8 @@ function truncate(s: string, n: number): string {
  * - `choice` to be the parsed first response choice when present
  *
  * Returns:
- * - the raw completion text before sanitization
+ * - the raw completion text
  */
 export function extractRawCompletion(choice?: ChatChoice): string {
   return choice?.message?.content ?? choice?.delta?.content ?? ''
-}
-
-/**
- * Normalizes model output into an inline continuation.
- *
- * Before:
- * - `"我需要构建一个博客系统，该如何开始？"`, prefix = `"我需要构建一个博客系统"`
- *
- * After:
- * - `"，该如何开始？"`
- */
-export function sanitizeCompletion(raw: string, prefix: string): string {
-  if (!raw)
-    return ''
-  let out = raw.replace(/\r/g, '')
-
-  out = out.replace(/^```[\s\S]*?\n/, '').replace(/\n```$/, '')
-  out = out.replace(/^\s*["'“”‘’「」『』]+/, '').replace(/["'“”‘’「」『』]+\s*$/, '')
-
-  const trimmedPrefix = prefix.trimEnd()
-  if (trimmedPrefix && out.startsWith(trimmedPrefix)) {
-    out = out.slice(trimmedPrefix.length)
-  }
-
-  if (/\s$/.test(prefix)) {
-    out = out.replace(/^\s+/, '')
-  }
-
-  const lines = out.split('\n')
-  if (lines.length > 2) {
-    out = lines.slice(0, 2).join('\n')
-  }
-
-  return out.replace(/\s+$/u, '')
 }

@@ -18,6 +18,9 @@ import { deriveCompletionQualitySignal } from './quality-signal'
  */
 export interface BuildCompletionDebugInfoArgs {
   appliedStrategy: {
+    requestStage: 'enhanced' | 'fast'
+    shouldRunEnhancedStage: boolean
+    telemetryWindowSize: number
     knowledgeBudget: {
       topK: number
       maxChars: number

@@ -40,12 +40,14 @@ import {
 } from '~/utils/knowledge/import'
 import { completeOnce, completeOnceDetailed } from '~/utils/llm'
 import { openSettingsPage } from '~/utils/open-settings'
+import { deriveCompletionQualitySignal } from '~/utils/quality-signal'
 import { loadSettings, saveSettings } from '~/utils/settings'
 
 export default defineBackground(() => {
   const defaultKnowledgeBaseId = 'default'
   const knowledgeContextMaxChars = 900
   const knowledgeTopK = 2
+  const telemetryWindowSize = 20
   let creatingOffscreenDocument: Promise<void> | null = null
   const inFlight = new Map<string, AbortController>()
   const requestSignalKeys = new Map<string, string>()
@@ -191,6 +193,7 @@ export default defineBackground(() => {
   })
 
   async function handleCompletion(req: CompletionRequest): Promise<CompletionResponse> {
+    const requestStage = req.stage ?? 'fast'
     if (req.signalKey !== undefined && req.signalKey.length > 0) {
       cancelBySignalKey(req.signalKey)
     }
@@ -200,7 +203,7 @@ export default defineBackground(() => {
 
     const settings = await loadSettings()
     if (!settings.enabled) {
-      return emptyResponse(req.id, settings.provider, settings.model)
+      return emptyResponse(req.id, settings.provider, settings.model, requestStage)
     }
     if (!settings.baseUrl) {
       throw new Error('Missing base URL. Please open the settings page to configure Copycat.')
@@ -209,38 +212,20 @@ export default defineBackground(() => {
     const telemetryHost = resolveTelemetryHostFromRequest(req)
     const telemetryStats
       = telemetryHost !== null && telemetryHost.length > 0
-        ? await getCompletionEventStats(telemetryHost)
+        ? await getCompletionEventStats(telemetryHost, telemetryWindowSize)
         : null
-    const qualitySignal = telemetryStats === null
-      ? undefined
-      : telemetryStats.total < 5
-        ? {
-            band: 'insufficient_data' as const,
-            shouldBoostKnowledge: false,
-            reason: 'Not enough local completion history yet.',
-          }
-        : telemetryStats.acceptanceRate >= 0.6
-          ? {
-              band: 'healthy' as const,
-              shouldBoostKnowledge: false,
-              reason: 'Recent completions are being accepted consistently.',
-            }
-          : telemetryStats.acceptanceRate >= 0.3
-            ? {
-                band: 'mixed' as const,
-                shouldBoostKnowledge: false,
-                reason: 'Recent completions are inconsistent and may need closer review.',
-              }
-            : {
-                band: 'poor' as const,
-                shouldBoostKnowledge: true,
-                reason: 'Recent completions are often rejected or ignored.',
-              }
-    const knowledgeBudget = resolveKnowledgeRetrievalBudget({
-      baseTopK: knowledgeTopK,
-      baseMaxChars: knowledgeContextMaxChars,
-      qualitySignal,
-    })
+    const qualitySignal = telemetryStats === null ? undefined : deriveCompletionQualitySignal(telemetryStats)
+    const shouldRunEnhancedStage = requestStage === 'fast' && qualitySignal?.shouldBoostKnowledge === true
+    const knowledgeBudget = requestStage === 'enhanced'
+      ? resolveKnowledgeRetrievalBudget({
+          baseTopK: knowledgeTopK,
+          baseMaxChars: knowledgeContextMaxChars,
+          qualitySignal,
+        })
+      : {
+          topK: knowledgeTopK,
+          maxChars: knowledgeContextMaxChars,
+        }
     const knowledgeResolution = await resolveCompletionKnowledge(
       req,
       settings.minPrefixChars,
@@ -262,6 +247,8 @@ export default defineBackground(() => {
         latencyMs: 0,
         provider: settings.provider,
         model: settings.model,
+        stage: requestStage,
+        shouldRunEnhancedStage,
       }
     }
     if (!req.debug) {
@@ -274,6 +261,8 @@ export default defineBackground(() => {
           latencyMs: 0,
           provider: settings.provider,
           model: settings.model,
+          stage: requestStage,
+          shouldRunEnhancedStage,
         }
       }
     }
@@ -322,8 +311,13 @@ export default defineBackground(() => {
         latencyMs: Math.round(performance.now() - start),
         provider: settings.provider,
         model: settings.model,
+        stage: requestStage,
+        shouldRunEnhancedStage,
         debug: buildCompletionDebugInfo(detailed.debug, {
           appliedStrategy: {
+            requestStage,
+            shouldRunEnhancedStage,
+            telemetryWindowSize,
             knowledgeBudget,
           },
           knowledgeResolution,
@@ -338,7 +332,7 @@ export default defineBackground(() => {
     }
     catch (error) {
       if (error instanceof Error && error.name === 'AbortError') {
-        return emptyResponse(req.id, settings.provider, settings.model)
+        return emptyResponse(req.id, settings.provider, settings.model, requestStage)
       }
       throw error
     }
@@ -378,8 +372,21 @@ export default defineBackground(() => {
     }
   }
 
-  function emptyResponse(id: string, provider: CompletionResponse['provider'], model: string) {
-    return { id, completion: '', latencyMs: 0, provider, model }
+  function emptyResponse(
+    id: string,
+    provider: CompletionResponse['provider'],
+    model: string,
+    stage: CompletionResponse['stage'],
+  ) {
+    return {
+      id,
+      completion: '',
+      latencyMs: 0,
+      provider,
+      model,
+      stage,
+      shouldRunEnhancedStage: false,
+    }
   }
 
   async function handleKnowledgeDelete(args: {

@@ -114,6 +114,51 @@ describe('indexeddb repositories', () => {
     })
   })
 
+  it('aggregates completion event stats from only the most recent window', async () => {
+    const events: CompletionEvent[] = [
+      {
+        id: 'evt-1',
+        prefix: 'old accepted',
+        suggestion: ' old accepted',
+        action: 'accepted',
+        latencyMs: 100,
+        timestamp: 100,
+        host: 'chatgpt.com',
+      },
+      {
+        id: 'evt-2',
+        prefix: 'new rejected',
+        suggestion: ' new rejected',
+        action: 'rejected',
+        latencyMs: 200,
+        timestamp: 200,
+        host: 'chatgpt.com',
+      },
+      {
+        id: 'evt-3',
+        prefix: 'new ignored',
+        suggestion: ' new ignored',
+        action: 'ignored',
+        latencyMs: 300,
+        timestamp: 300,
+        host: 'chatgpt.com',
+      },
+    ]
+
+    for (const event of events) {
+      await putCompletionEvent(event)
+    }
+
+    expect(await getCompletionEventStats('chatgpt.com', 2)).toEqual({
+      total: 2,
+      accepted: 0,
+      rejected: 1,
+      ignored: 1,
+      acceptanceRate: 0,
+      averageLatencyMs: 250,
+    })
+  })
+
   it('returns persisted completions while fresh and evicts them after expiry', async () => {
     await putPersistedCompletion({
       key: 'cache-key',

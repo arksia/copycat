@@ -30,6 +30,7 @@ export interface CompletionRequest {
   suffix?: string
   context?: string
   signalKey?: string
+  stage?: 'enhanced' | 'fast'
   debug?: boolean
 }
 
@@ -39,6 +40,9 @@ export interface CompletionDebugInfo {
   rawChoice: string
   cacheHit: boolean
   appliedStrategy?: {
+    requestStage: 'enhanced' | 'fast'
+    shouldRunEnhancedStage: boolean
+    telemetryWindowSize: number
     knowledgeBudget: {
       topK: number
       maxChars: number
@@ -72,6 +76,8 @@ export interface CompletionResponse {
   latencyMs: number
   provider: ProviderId
   model: string
+  stage: 'enhanced' | 'fast'
+  shouldRunEnhancedStage: boolean
   debug?: CompletionDebugInfo
 }
 

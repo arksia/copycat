@@ -12,7 +12,15 @@ import { sendRuntimeMessage } from '~/utils/messages'
 import { openSettingsPage } from '~/utils/open-settings'
 import { syncPlaygroundGhostText } from '~/utils/playground-ghost'
 import { PROVIDER_PRESETS } from '~/utils/providers'
+import {
+  buildStageActivityLines,
+  summarizeEnhancedOutcome,
+} from '~/utils/stage-activity'
 import { loadSettings } from '~/utils/settings'
+import {
+  shouldPreferEnhancedCompletion,
+  shouldRequestEnhancedStage,
+} from '~/utils/two-stage'
 
 const PLAYGROUND_SIGNAL_KEY = buildCompletionSignalKey('playground', 'textarea')
 const ghostOverlay = new GhostTextOverlay()
@@ -39,6 +47,11 @@ const debugKnowledgeChunks = ref<Array<{
   sourceName: string
   text: string
 }>>([])
+const stageFastCompletion = ref('')
+const stageEnhancedCompletion = ref('')
+const stageEnhancedTriggered = ref(false)
+const stageEnhancedReplaced = ref(false)
+const stageEnhancedRequested = ref(false)
 const debugAppliedStrategy = ref('')
 const debugTelemetry = ref('')
 const lastRequestId = ref('')
@@ -61,6 +74,16 @@ const providerPreset = computed(() => {
     return null
   return PROVIDER_PRESETS[settings.value.provider]
 })
+const stageOutcome = computed(() => summarizeEnhancedOutcome({
+  triggered: stageEnhancedTriggered.value,
+  replaced: stageEnhancedReplaced.value,
+}))
+const stageActivityLines = computed(() => buildStageActivityLines({
+  fastCompletion: stageFastCompletion.value,
+  shouldRunEnhancedStage: stageEnhancedRequested.value,
+  enhancedCompletion: stageEnhancedCompletion.value,
+  enhancedReplaced: stageEnhancedReplaced.value,
+}))
 
 const debouncedRequest = debounce(() => {
   void requestCompletion()
@@ -164,6 +187,11 @@ async function requestCompletion() {
   loading.value = true
   errorText.value = ''
   infoText.value = ''
+  stageFastCompletion.value = ''
+  stageEnhancedCompletion.value = ''
+  stageEnhancedTriggered.value = false
+  stageEnhancedReplaced.value = false
+  stageEnhancedRequested.value = false
 
   try {
     const response = await sendRuntimeMessage<CompletionResponse>({
@@ -173,12 +201,14 @@ async function requestCompletion() {
         prefix,
         suffix,
         signalKey: PLAYGROUND_SIGNAL_KEY,
+        stage: 'fast',
         debug: true,
       },
     })
     if (lastRequestId.value !== requestId)
       return
     suggestion.value = response?.completion ?? ''
+    stageFastCompletion.value = response?.completion ?? ''
     lastLatencyMs.value = response?.latencyMs ?? null
     debugRawCompletion.value = response?.debug?.rawCompletion ?? ''
     debugSanitizedCompletion.value = response?.debug?.sanitizedCompletion ?? ''
@@ -199,6 +229,14 @@ async function requestCompletion() {
       infoText.value
         = 'The request completed, but the model returned an empty completion for the current prefix.'
     }
+    if (shouldRequestEnhancedStage(response) && lastRequestId.value === requestId) {
+      stageEnhancedRequested.value = true
+      void requestEnhancedCompletion({
+        currentSuggestion: response.completion,
+        prefix,
+        suffix,
+      })
+    }
   }
   catch (error) {
     if (lastRequestId.value !== requestId)
@@ -216,6 +254,66 @@ async function requestCompletion() {
     if (lastRequestId.value === requestId) {
       loading.value = false
       lastFingerprint.value = ''
+    }
+  }
+}
+
+async function requestEnhancedCompletion(args: {
+  currentSuggestion: string
+  prefix: string
+  suffix: string
+}) {
+  if (!settings.value?.enabled)
+    return
+
+  const requestId = nextId('play')
+  lastRequestId.value = requestId
+
+  try {
+    const response = await sendRuntimeMessage<CompletionResponse>({
+      type: 'completion/request',
+      payload: {
+        id: requestId,
+        prefix: args.prefix,
+        suffix: args.suffix,
+        signalKey: PLAYGROUND_SIGNAL_KEY,
+        stage: 'enhanced',
+        debug: true,
+      },
+    })
+
+    if (lastRequestId.value !== requestId)
+      return
+    if (previewPrefix.value !== args.prefix)
+      return
+    stageEnhancedTriggered.value = true
+    stageEnhancedCompletion.value = response.completion
+    const shouldReplace = shouldPreferEnhancedCompletion(args.currentSuggestion, response.completion)
+    stageEnhancedReplaced.value = shouldReplace
+    if (!shouldReplace)
+      return
+
+    suggestion.value = response.completion
+    lastLatencyMs.value = response.latencyMs
+    debugRawCompletion.value = response?.debug?.rawCompletion ?? ''
+    debugSanitizedCompletion.value = response?.debug?.sanitizedCompletion ?? ''
+    debugRawChoice.value = response?.debug?.rawChoice ?? ''
+    debugUserPrompt.value = response?.debug?.requestBody.userPrompt ?? ''
+    debugSystemPrompt.value = response?.debug?.requestBody.systemPrompt ?? ''
+    debugAppliedStrategy.value = response?.debug?.appliedStrategy
+      ? JSON.stringify(response.debug.appliedStrategy, null, 2)
+      : ''
+    debugKnowledgeContext.value = response?.debug?.knowledgeContext ?? ''
+    debugKnowledgeQuery.value = response?.debug?.knowledgeQuery ?? ''
+    debugKnowledgeChunks.value = response?.debug?.knowledgeChunks ?? []
+    debugTelemetry.value = response?.debug?.telemetry
+      ? JSON.stringify(response.debug.telemetry, null, 2)
+      : ''
+    queueGhostSync()
+  }
+  catch (error) {
+    if (!(error instanceof Error && /abort/i.test(error.message))) {
+      console.warn('[copycat] enhanced playground completion error:', error)
     }
   }
 }
@@ -325,11 +423,16 @@ function clearAll() {
   infoText.value = ''
   debugRawCompletion.value = ''
   debugSanitizedCompletion.value = ''
-  debugRawChoice.value = ''
-  debugUserPrompt.value = ''
-  debugSystemPrompt.value = ''
-  debugAppliedStrategy.value = ''
-  debugTelemetry.value = ''
+    debugRawChoice.value = ''
+    debugUserPrompt.value = ''
+    debugSystemPrompt.value = ''
+    stageFastCompletion.value = ''
+    stageEnhancedCompletion.value = ''
+    stageEnhancedTriggered.value = false
+    stageEnhancedReplaced.value = false
+    stageEnhancedRequested.value = false
+    debugAppliedStrategy.value = ''
+    debugTelemetry.value = ''
   lastRequestId.value = ''
   lastLatencyMs.value = null
   lastFingerprint.value = ''
@@ -491,6 +594,47 @@ function openOptions() {
                 <dd class="mt-1 text-neutral-800">{{ settings?.enabled ? 'yes' : 'no' }}</dd>
               </div>
             </dl>
+          </div>
+
+          <div class="card">
+            <h2 class="mb-4 text-base font-semibold">Stage activity</h2>
+            <dl class="space-y-3 text-sm">
+              <div>
+                <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  Fast completion
+                </dt>
+                <dd class="mt-1 text-neutral-800">
+                  {{ stageFastCompletion ? 'returned' : 'n/a' }}
+                </dd>
+              </div>
+              <div>
+                <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  Enhanced requested
+                </dt>
+                <dd class="mt-1 text-neutral-800">
+                  {{ stageEnhancedRequested ? 'yes' : 'no' }}
+                </dd>
+              </div>
+              <div>
+                <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  Enhanced outcome
+                </dt>
+                <dd class="mt-1 text-neutral-800">
+                  {{ stageOutcome }}
+                </dd>
+              </div>
+            </dl>
+
+            <div class="mt-4">
+              <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                Timeline
+              </div>
+              <ul class="space-y-2 text-sm text-neutral-800">
+                <li v-for="line in stageActivityLines" :key="line" class="rounded bg-neutral-50 px-2 py-1 font-mono text-xs">
+                  {{ line }}
+                </li>
+              </ul>
+            </div>
           </div>
 
           <div class="card">

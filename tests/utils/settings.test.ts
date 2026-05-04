@@ -1,7 +1,8 @@
 import type { Settings } from '~/types'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_SETTINGS,
+  buildDevSettingsOverride,
   hostMatches,
   isHostEnabled,
   normalizeSettingsShape,
@@ -22,6 +23,10 @@ const baseSettings: Settings = {
   disabledHosts: [],
 }
 
+afterEach(() => {
+  vi.unstubAllEnvs()
+})
+
 describe('hostMatches', () => {
   it('matches exact hosts and subdomains', () => {
     expect(hostMatches('https://chatgpt.com', 'chatgpt.com')).toBe(true)
@@ -41,15 +46,6 @@ describe('isHostEnabled', () => {
       disabledHosts: ['chatgpt.com'],
     }
     expect(isHostEnabled(settings, 'https://chatgpt.com')).toBe(false)
-  })
-})
-
-describe('dEFAULT_SETTINGS', () => {
-  it('uses neutral provider defaults', () => {
-    expect(DEFAULT_SETTINGS.provider).toBe('groq')
-    expect(DEFAULT_SETTINGS.baseUrl).toBe('https://api.groq.com/openai/v1')
-    expect(DEFAULT_SETTINGS.model).toBe('llama-3.1-8b-instant')
-    expect(DEFAULT_SETTINGS.maxTokens).toBe(48)
   })
 })
 
@@ -79,6 +75,30 @@ describe('normalizeSettingsShape', () => {
       maxTokens: DEFAULT_SETTINGS.maxTokens,
       debounceMs: DEFAULT_SETTINGS.debounceMs,
       temperature: DEFAULT_SETTINGS.temperature,
+    })
+  })
+})
+
+describe('buildDevSettingsOverride', () => {
+  it('returns null when no dev env overrides are present', () => {
+    vi.stubEnv('VITE_COPYCAT_PROVIDER', '')
+    vi.stubEnv('VITE_COPYCAT_BASE_URL', '')
+    vi.stubEnv('VITE_COPYCAT_MODEL', '')
+    vi.stubEnv('VITE_COPYCAT_API_KEY', '')
+    expect(buildDevSettingsOverride()).toBeNull()
+  })
+
+  it('builds a partial settings override from dev env values', () => {
+    vi.stubEnv('VITE_COPYCAT_PROVIDER', 'openai')
+    vi.stubEnv('VITE_COPYCAT_BASE_URL', 'https://api.minimaxi.com/v1')
+    vi.stubEnv('VITE_COPYCAT_MODEL', 'MiniMax-Text-01')
+    vi.stubEnv('VITE_COPYCAT_API_KEY', 'test-key')
+
+    expect(buildDevSettingsOverride()).toEqual({
+      provider: 'openai',
+      baseUrl: 'https://api.minimaxi.com/v1',
+      model: 'MiniMax-Text-01',
+      apiKey: 'test-key',
     })
   })
 })

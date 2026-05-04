@@ -25,6 +25,9 @@ describe('buildCompletionDebugInfo', () => {
 
     expect(buildCompletionDebugInfo(baseDebug, {
       appliedStrategy: {
+        requestStage: 'enhanced',
+        shouldRunEnhancedStage: false,
+        telemetryWindowSize: 20,
         knowledgeBudget: {
           topK: 3,
           maxChars: 1200,
@@ -55,6 +58,9 @@ describe('buildCompletionDebugInfo', () => {
     })).toEqual({
       ...baseDebug,
       appliedStrategy: {
+        requestStage: 'enhanced',
+        shouldRunEnhancedStage: false,
+        telemetryWindowSize: 20,
         knowledgeBudget: {
           topK: 3,
           maxChars: 1200,
@@ -84,6 +90,9 @@ describe('buildCompletionDebugInfo', () => {
   it('returns undefined when the base debug payload is absent', () => {
     expect(buildCompletionDebugInfo(undefined, {
       appliedStrategy: {
+        requestStage: 'fast',
+        shouldRunEnhancedStage: true,
+        telemetryWindowSize: 20,
         knowledgeBudget: {
           topK: 2,
           maxChars: 900,

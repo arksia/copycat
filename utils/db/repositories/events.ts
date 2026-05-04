@@ -70,8 +70,11 @@ export async function listRecentCompletionEventsByHost(
  * Returns:
  * - total counts, acceptance rate, and average latency for that host
  */
-export async function getCompletionEventStats(host: string): Promise<CompletionEventStats> {
-  const events = await listRecentCompletionEventsByHost(host, 200)
+export async function getCompletionEventStats(
+  host: string,
+  limit = 20,
+): Promise<CompletionEventStats> {
+  const events = await listRecentCompletionEventsByHost(host, limit)
   if (events.length === 0) {
     return {
       total: 0,

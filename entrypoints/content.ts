@@ -15,6 +15,10 @@ import { GhostTextOverlay } from '~/utils/ghost-text'
 import { nextId } from '~/utils/id'
 import { sendRuntimeMessage } from '~/utils/messages'
 import { isHostEnabled, loadSettings, onSettingsChanged } from '~/utils/settings'
+import {
+  shouldPreferEnhancedCompletion,
+  shouldRequestEnhancedStage,
+} from '~/utils/two-stage'
 
 export default defineContentScript({
   matches: ['<all_urls>'],
@@ -265,12 +269,14 @@ class CopycatController {
     const id = nextId('req')
     this.lastRequestId = id
     this.pendingFingerprint = fingerprint
+    const signalKey = buildCompletionSignalKey(location.host, editor.kind)
 
     const req: CompletionRequest = {
       id,
       prefix,
       suffix,
-      signalKey: buildCompletionSignalKey(location.host, editor.kind),
+      signalKey,
+      stage: 'fast',
     }
 
     try {
@@ -297,6 +303,16 @@ class CopycatController {
         suggestion: res.completion,
       }
       this.overlay.show(editor, res.completion)
+
+      if (shouldRequestEnhancedStage(res)) {
+        void this.requestEnhancedCompletion({
+          currentSuggestion: res.completion,
+          editor,
+          prefix,
+          signalKey,
+          suffix,
+        })
+      }
     }
     catch (err) {
       if (this.lastRequestId === id) {
@@ -305,6 +321,57 @@ class CopycatController {
       }
       if (!(err instanceof Error && /abort/i.test(err.message))) {
         console.warn('[copycat] completion error:', err)
+      }
+    }
+  }
+
+  private async requestEnhancedCompletion(args: {
+    currentSuggestion: string
+    editor: EditorHandle
+    prefix: string
+    signalKey: string
+    suffix?: string
+  }) {
+    if (!this.settings)
+      return
+
+    const id = nextId('req')
+    this.lastRequestId = id
+
+    try {
+      const res = await sendRuntimeMessage<CompletionResponse>({
+        type: 'completion/request',
+        payload: {
+          id,
+          prefix: args.prefix,
+          suffix: args.suffix,
+          signalKey: args.signalKey,
+          stage: 'enhanced',
+        },
+      })
+
+      if (this.lastRequestId !== id)
+        return
+      if (args.editor !== this.activeEditor)
+        return
+      if (args.editor.getPrefix() !== args.prefix)
+        return
+      if (!shouldPreferEnhancedCompletion(args.currentSuggestion, res.completion))
+        return
+
+      this.active = {
+        id,
+        editor: args.editor,
+        latencyMs: res.latencyMs,
+        originalSuggestion: res.completion,
+        prefix: args.prefix,
+        suggestion: res.completion,
+      }
+      this.overlay.show(args.editor, res.completion)
+    }
+    catch (err) {
+      if (!(err instanceof Error && /abort/i.test(err.message))) {
+        console.warn('[copycat] enhanced completion error:', err)
       }
     }
   }

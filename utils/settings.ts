@@ -64,6 +64,43 @@ export const DEFAULT_SETTINGS: Settings = {
 }
 
 /**
+ * Builds a local development settings override from environment variables.
+ *
+ * Use when:
+ * - developers want a prefilled local backend during `pnpm dev`
+ * - secrets should stay outside git while still seeding first-run settings
+ *
+ * Expects:
+ * - Vite-prefixed env vars when local defaults should be overridden
+ *
+ * Returns:
+ * - a partial settings object, or `null` when no override is configured
+ */
+export function buildDevSettingsOverride(): Partial<Settings> | null {
+  const provider = import.meta.env.VITE_COPYCAT_PROVIDER
+  const baseUrl = import.meta.env.VITE_COPYCAT_BASE_URL
+  const model = import.meta.env.VITE_COPYCAT_MODEL
+  const apiKey = import.meta.env.VITE_COPYCAT_API_KEY
+
+  const next: Partial<Settings> = {}
+
+  if (isProviderId(provider)) {
+    next.provider = provider
+  }
+  if (typeof baseUrl === 'string' && baseUrl.length > 0) {
+    next.baseUrl = baseUrl
+  }
+  if (typeof model === 'string' && model.length > 0) {
+    next.model = model
+  }
+  if (typeof apiKey === 'string' && apiKey.length > 0) {
+    next.apiKey = apiKey
+  }
+
+  return Object.keys(next).length > 0 ? next : null
+}
+
+/**
  * Loads the persisted settings object from extension local storage.
  *
  * Use when:
@@ -79,7 +116,8 @@ export const DEFAULT_SETTINGS: Settings = {
 export async function loadSettings(): Promise<Settings> {
   const raw = await chrome.storage.local.get(STORAGE_KEY)
   const stored = (raw[STORAGE_KEY] ?? {}) as Partial<Settings>
-  return normalizeSettingsShape(stored)
+  const devOverride = buildDevSettingsOverride()
+  return normalizeSettingsShape(devOverride === null ? stored : { ...devOverride, ...stored })
 }
 
 /**
