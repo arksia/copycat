@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildCompletionCacheKey,
   CompletionMemoryCache,
-} from '~/utils/completion-cache'
+} from '~/utils/completion/cache'
 
 describe('buildCompletionCacheKey', () => {
   it('changes when request context changes', () => {

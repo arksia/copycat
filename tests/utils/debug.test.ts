@@ -1,6 +1,6 @@
 import type { CompletionDebugInfo, CompletionEventStats } from '~/types'
 import { describe, expect, it } from 'vitest'
-import { buildCompletionDebugInfo } from '~/utils/debug'
+import { buildCompletionDebugInfo } from '~/utils/completion/debug'
 
 describe('buildCompletionDebugInfo', () => {
   it('attaches knowledge and telemetry details to an existing debug payload', () => {

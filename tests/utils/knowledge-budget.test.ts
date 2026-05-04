@@ -1,4 +1,4 @@
-import type { CompletionQualitySignal } from '~/utils/quality-signal'
+import type { CompletionQualitySignal } from '~/utils/completion/telemetry'
 import { describe, expect, it } from 'vitest'
 import { resolveKnowledgeRetrievalBudget } from '~/utils/knowledge-budget'
 

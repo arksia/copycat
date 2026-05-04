@@ -1,5 +1,5 @@
 import { chunkKnowledgeDocument } from '~/utils/knowledge/chunker'
-import { parseKnowledgeDocumentContent } from '~/utils/knowledge/parser'
+import { parseKnowledgeDocumentContent } from '~/utils/knowledge/normalize'
 
 interface OffscreenKnowledgeProcessRequest {
   payload: {

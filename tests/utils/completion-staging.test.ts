@@ -1,9 +1,11 @@
 import type { CompletionResponse } from '~/types'
 import { describe, expect, it } from 'vitest'
 import {
+  buildStageActivityLines,
   shouldPreferEnhancedCompletion,
   shouldRequestEnhancedStage,
-} from '~/utils/two-stage'
+  summarizeEnhancedOutcome,
+} from '~/utils/completion/staging'
 
 function buildResponse(partial: Partial<CompletionResponse>): CompletionResponse {
   return {
@@ -50,5 +52,52 @@ describe('shouldPreferEnhancedCompletion', () => {
     expect(shouldPreferEnhancedCompletion('，支持评论和标签管理。', '，支持评论。')).toBe(false)
     expect(shouldPreferEnhancedCompletion('，支持评论。', '，支持评论。')).toBe(false)
     expect(shouldPreferEnhancedCompletion('，支持评论。', '')).toBe(false)
+  })
+})
+
+describe('summarizeEnhancedOutcome', () => {
+  it('distinguishes skipped, replaced, and kept outcomes', () => {
+    expect(summarizeEnhancedOutcome({
+      triggered: false,
+      replaced: false,
+    })).toBe('skipped')
+
+    expect(summarizeEnhancedOutcome({
+      triggered: true,
+      replaced: true,
+    })).toBe('replaced')
+
+    expect(summarizeEnhancedOutcome({
+      triggered: true,
+      replaced: false,
+    })).toBe('kept_fast')
+  })
+})
+
+describe('buildStageActivityLines', () => {
+  it('builds a readable stage timeline', () => {
+    expect(buildStageActivityLines({
+      fastCompletion: '，支持评论。',
+      shouldRunEnhancedStage: true,
+      enhancedCompletion: '，支持评论和标签。',
+      enhancedReplaced: true,
+    })).toEqual([
+      'fast: completed',
+      'fast: requested enhanced follow-up',
+      'enhanced: completed',
+      'enhanced: replaced fast suggestion',
+    ])
+  })
+
+  it('shows skipped enhanced stage clearly', () => {
+    expect(buildStageActivityLines({
+      fastCompletion: '',
+      shouldRunEnhancedStage: false,
+      enhancedCompletion: '',
+      enhancedReplaced: false,
+    })).toEqual([
+      'fast: completed',
+      'enhanced: not requested',
+    ])
   })
 })

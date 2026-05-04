@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildKnowledgeContext,
   buildKnowledgeSearchQuery,
-} from '~/utils/knowledge/context'
+} from '~/utils/knowledge/prompt'
 
 describe('buildKnowledgeSearchQuery', () => {
   it('uses the trailing prompt fragment instead of the entire prefix', () => {

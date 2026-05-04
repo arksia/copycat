@@ -1,6 +1,6 @@
 import type { CompletionEvent, CompletionEventStats } from '~/types'
 import { describe, expect, it, vi } from 'vitest'
-import { loadTelemetrySnapshot } from '~/utils/telemetry'
+import { loadTelemetrySnapshot } from '~/utils/completion/telemetry'
 
 describe('loadTelemetrySnapshot', () => {
   it('returns telemetry data when both loaders succeed', async () => {

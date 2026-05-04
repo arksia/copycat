@@ -13,7 +13,8 @@ import {
   buildCompletionCacheKey,
   CompletionMemoryCache,
   DEFAULT_COMPLETION_CACHE_TTL_MS,
-} from '~/utils/completion-cache'
+} from '~/utils/completion/cache'
+import { openSettingsPage } from '~/utils/core/runtime'
 import { getPersistedCompletion, putPersistedCompletion } from '~/utils/db/repositories/completions'
 import {
   getCompletionEventStats,
@@ -27,21 +28,20 @@ import {
   putKnowledgeDocument,
   searchKnowledgeChunks,
 } from '~/utils/db/repositories/knowledge'
-import { buildCompletionDebugInfo } from '~/utils/debug'
+import { buildCompletionDebugInfo } from '~/utils/completion/debug'
 import { resolveKnowledgeRetrievalBudget } from '~/utils/knowledge-budget'
 import {
   buildKnowledgeContext,
   buildKnowledgeSearchQuery,
-} from '~/utils/knowledge/context'
+} from '~/utils/knowledge/prompt'
 import {
   buildKnowledgeDocumentId,
   buildKnowledgeDocumentRecord,
   computeKnowledgeChecksum,
 } from '~/utils/knowledge/import'
-import { completeOnce, completeOnceDetailed } from '~/utils/llm'
-import { openSettingsPage } from '~/utils/open-settings'
-import { deriveCompletionQualitySignal } from '~/utils/quality-signal'
+import { completeOnce, completeOnceDetailed } from '~/utils/completion/client'
 import { loadSettings, saveSettings } from '~/utils/settings'
+import { deriveCompletionQualitySignal } from '~/utils/completion/telemetry'
 
 export default defineBackground(() => {
   const defaultKnowledgeBaseId = 'default'

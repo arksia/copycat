@@ -4,7 +4,7 @@ import type {
   CompletionResponse,
   KnowledgeChunk,
 } from '~/types'
-import { deriveCompletionQualitySignal } from './quality-signal'
+import { deriveCompletionQualitySignal } from './telemetry'
 
 /**
  * Inputs required to build one structured completion debug payload.

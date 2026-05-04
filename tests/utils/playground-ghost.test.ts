@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { GhostTextOverlay } from '~/utils/ghost-text'
-import { syncPlaygroundGhostText } from '~/utils/playground-ghost'
+import { GhostTextOverlay, syncPlaygroundGhostText } from '~/utils/ghost-text'
 
 afterEach(() => {
   document.body.innerHTML = ''

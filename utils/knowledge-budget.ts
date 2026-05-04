@@ -1,4 +1,4 @@
-import type { CompletionQualitySignal } from './quality-signal'
+import type { CompletionQualitySignal } from './completion/telemetry'
 
 /**
  * Retrieval budget used for one knowledge-grounded completion request.

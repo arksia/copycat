@@ -4,23 +4,20 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   buildCompletionFingerprint,
   buildCompletionSignalKey,
-} from '~/utils/completion-request'
-import { debounce } from '~/utils/debounce'
-import { GhostTextOverlay } from '~/utils/ghost-text'
-import { nextId } from '~/utils/id'
-import { sendRuntimeMessage } from '~/utils/messages'
-import { openSettingsPage } from '~/utils/open-settings'
-import { syncPlaygroundGhostText } from '~/utils/playground-ghost'
+} from '~/utils/completion/request'
+import { debounce, nextId } from '~/utils/core/base'
+import { openSettingsPage, sendRuntimeMessage } from '~/utils/core/runtime'
+import { GhostTextOverlay, syncPlaygroundGhostText } from '~/utils/ghost-text'
 import { PROVIDER_PRESETS } from '~/utils/providers'
 import {
   buildStageActivityLines,
   summarizeEnhancedOutcome,
-} from '~/utils/stage-activity'
+} from '~/utils/completion/staging'
 import { loadSettings } from '~/utils/settings'
 import {
   shouldPreferEnhancedCompletion,
   shouldRequestEnhancedStage,
-} from '~/utils/two-stage'
+} from '~/utils/completion/staging'
 
 const PLAYGROUND_SIGNAL_KEY = buildCompletionSignalKey('playground', 'textarea')
 const ghostOverlay = new GhostTextOverlay()

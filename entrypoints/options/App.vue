@@ -11,18 +11,19 @@ import type {
   ProviderId,
   Settings,
 } from '~/types'
-import type { DiscoveredModel } from '~/utils/model-discovery'
+import type { DiscoveredModel } from '~/utils/openai-compatible'
 import { computed, onMounted, ref, watch } from 'vue'
-import { sendRuntimeMessage } from '~/utils/messages'
-import { buildModelsUrl, parseModelListResponse } from '~/utils/model-discovery'
+import { sendRuntimeMessage } from '~/utils/core/runtime'
 import {
+  buildModelsUrl,
   buildOpenAICompatibleHeaders,
   extractAssistantMessageContent,
   joinOpenAICompatibleUrl,
+  parseModelListResponse,
 } from '~/utils/openai-compatible'
 import { PROVIDER_ORDER, PROVIDER_PRESETS, resolveProviderPreset } from '~/utils/providers'
 import { DEFAULT_SETTINGS, DEFAULT_SYSTEM_PROMPT, loadSettings, saveSettings } from '~/utils/settings'
-import { loadTelemetrySnapshot } from '~/utils/telemetry'
+import { loadTelemetrySnapshot } from '~/utils/completion/telemetry'
 
 const DEFAULT_KB_ID = 'default'
 

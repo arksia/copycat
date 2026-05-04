@@ -1,4 +1,4 @@
-import type { EditorKind } from './editor-adapter'
+import type { EditorKind } from '../editor-adapter'
 
 /**
  * Builds the shared cancellation key for one host/editor request channel.

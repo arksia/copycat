@@ -2,7 +2,7 @@ import type { CompletionDebugInfo, Settings } from '~/types'
 import {
   buildOpenAICompatibleHeaders,
   joinOpenAICompatibleUrl,
-} from './openai-compatible'
+} from '../openai-compatible'
 
 /**
  * Arguments for a single inline completion request.

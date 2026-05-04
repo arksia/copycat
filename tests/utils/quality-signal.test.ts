@@ -1,6 +1,6 @@
 import type { CompletionEventStats } from '~/types'
 import { describe, expect, it } from 'vitest'
-import { deriveCompletionQualitySignal } from '~/utils/quality-signal'
+import { deriveCompletionQualitySignal } from '~/utils/completion/telemetry'
 
 function buildStats(partial: Partial<CompletionEventStats>): CompletionEventStats {
   return {

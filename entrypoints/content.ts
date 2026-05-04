@@ -8,17 +8,16 @@ import type { EditorHandle } from '~/utils/editor-adapter'
 import {
   buildCompletionFingerprint,
   buildCompletionSignalKey,
-} from '~/utils/completion-request'
-import { debounce } from '~/utils/debounce'
+} from '~/utils/completion/request'
+import { debounce, nextId } from '~/utils/core/base'
+import { sendRuntimeMessage } from '~/utils/core/runtime'
 import { resolveEditor } from '~/utils/editor-adapter'
 import { GhostTextOverlay } from '~/utils/ghost-text'
-import { nextId } from '~/utils/id'
-import { sendRuntimeMessage } from '~/utils/messages'
 import { isHostEnabled, loadSettings, onSettingsChanged } from '~/utils/settings'
 import {
   shouldPreferEnhancedCompletion,
   shouldRequestEnhancedStage,
-} from '~/utils/two-stage'
+} from '~/utils/completion/staging'
 
 export default defineContentScript({
   matches: ['<all_urls>'],

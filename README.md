@@ -42,7 +42,7 @@ Current progress is best described as **Milestone 1-lite complete**:
 - ✅ Extensible editor adapter layer, with current delivery priority on native text inputs
 - ⏳ Phase 1b — ProseMirror / richer editor adapter with CSS Highlight API-style native rendering
 - ⏳ Phase 2 — IndexedDB local data layer and knowledge ingestion / retrieval
-- ⏳ Phase 3 — Soul / Prompt Skills / telemetry and two-stage completion orchestration
+- ⏳ Phase 3 — Soul / Prompt Skills / telemetry and staged completion orchestration
 - ⏳ Phase 4 — WebGPU local inference as the default completion path
 
 See the [Design Doc](#design-notes) at the bottom for details.
