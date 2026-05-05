@@ -70,6 +70,9 @@ export interface CompletionDebugInfo {
       queryEmbeddingMs: number
       searchMs: number
       contextMs: number
+      allChunkCount: number
+      embeddedChunkCount: number
+      semanticState: 'cache_hit' | 'computed' | 'skipped'
     }
   }
   knowledgeContext?: string

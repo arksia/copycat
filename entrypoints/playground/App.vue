@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { CompletionEvent, CompletionResponse, Settings } from '~/types'
+import type { CompletionDebugInfo, CompletionEvent, CompletionResponse, Settings } from '~/types'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import {
   buildCompletionFingerprint,
@@ -46,6 +46,7 @@ const debugKnowledgeChunks = ref<Array<{
   sourceName: string
   text: string
 }>>([])
+const debugTimings = ref('')
 const stageFastCompletion = ref('')
 const stageEnhancedCompletion = ref('')
 const stageEnhancedTriggered = ref(false)
@@ -83,6 +84,37 @@ const stageActivityLines = computed(() => buildStageActivityLines({
   enhancedCompletion: stageEnhancedCompletion.value,
   enhancedReplaced: stageEnhancedReplaced.value,
 }))
+const parsedTimings = computed(() => parseDebugTimings(debugTimings.value))
+const timingSummary = computed(() => {
+  const timings = parsedTimings.value
+  if (timings === null || timings === undefined) {
+    return []
+  }
+
+  return [
+    ['Total', `${timings.totalMs} ms`],
+    ['LLM', `${timings.llmMs} ms`],
+    ['Knowledge', `${timings.knowledgeMs} ms`],
+    ['Settings', `${timings.settingsMs} ms`],
+    ['Telemetry', `${timings.telemetryMs} ms`],
+  ]
+})
+const knowledgeTimingSummary = computed(() => {
+  const knowledge = parsedTimings.value?.knowledge
+  if (knowledge === undefined) {
+    return []
+  }
+
+  return [
+    ['Semantic state', knowledge.semanticState],
+    ['All chunks', String(knowledge.allChunkCount)],
+    ['Embedded chunks', String(knowledge.embeddedChunkCount)],
+    ['Query embedding', `${knowledge.queryEmbeddingMs} ms`],
+    ['Search', `${knowledge.searchMs} ms`],
+    ['Context', `${knowledge.contextMs} ms`],
+    ['Load chunks', `${knowledge.loadChunksMs} ms`],
+  ]
+})
 
 const debouncedRequest = debounce(() => {
   void requestCompletion()
@@ -209,35 +241,7 @@ async function requestCompletion() {
     suggestion.value = response?.completion ?? ''
     stageFastCompletion.value = response?.completion ?? ''
     lastLatencyMs.value = response?.latencyMs ?? null
-    debugRawCompletion.value = response?.debug?.rawCompletion ?? ''
-    debugSanitizedCompletion.value = response?.debug?.sanitizedCompletion ?? ''
-    debugRawChoice.value = response?.debug?.rawChoice ?? ''
-    debugUserPrompt.value = response?.debug?.requestBody.userPrompt ?? ''
-    debugSystemPrompt.value = response?.debug?.requestBody.systemPrompt ?? ''
-    debugAppliedStrategy.value = response?.debug?.appliedStrategy
-      ? JSON.stringify(response.debug.appliedStrategy, null, 2)
-      : ''
-    debugKnowledgeContext.value = response?.debug?.knowledgeContext ?? ''
-    debugKnowledgeQuery.value = response?.debug?.knowledgeQuery ?? ''
-    debugKnowledgeRecall.value = response?.debug?.knowledgeRecall
-      ? JSON.stringify(response.debug.knowledgeRecall, null, 2)
-      : ''
-    debugKnowledgeRerank.value = response?.debug?.knowledgeRerank
-      ? JSON.stringify(response.debug.knowledgeRerank, null, 2)
-      : ''
-    debugKnowledgeChunks.value = response?.debug?.knowledgeChunks ?? []
-    debugTelemetry.value = response?.debug?.telemetry
-      ? JSON.stringify(response.debug.telemetry, null, 2)
-      : ''
-    if (import.meta.env.DEV && response?.debug?.timings) {
-      console.info('[copycat][playground][timings]', {
-        requestId,
-        stage: 'fast',
-        timings: response.debug.timings,
-        knowledgeRecall: response.debug.knowledgeRecall,
-        knowledgeRerank: response.debug.knowledgeRerank,
-      })
-    }
+    assignDebugState(response.debug)
     queueGhostSync()
     if (!suggestion.value) {
       infoText.value
@@ -257,13 +261,7 @@ async function requestCompletion() {
       return
     errorText.value = error instanceof Error ? error.message : String(error)
     suggestion.value = ''
-    debugAppliedStrategy.value = ''
-    debugKnowledgeContext.value = ''
-    debugKnowledgeQuery.value = ''
-    debugKnowledgeRecall.value = ''
-    debugKnowledgeRerank.value = ''
-    debugKnowledgeChunks.value = []
-    debugTelemetry.value = ''
+    clearDebugState()
     queueGhostSync()
   }
   finally {
@@ -311,35 +309,7 @@ async function requestEnhancedCompletion(args: {
 
     suggestion.value = response.completion
     lastLatencyMs.value = response.latencyMs
-    debugRawCompletion.value = response?.debug?.rawCompletion ?? ''
-    debugSanitizedCompletion.value = response?.debug?.sanitizedCompletion ?? ''
-    debugRawChoice.value = response?.debug?.rawChoice ?? ''
-    debugUserPrompt.value = response?.debug?.requestBody.userPrompt ?? ''
-    debugSystemPrompt.value = response?.debug?.requestBody.systemPrompt ?? ''
-    debugAppliedStrategy.value = response?.debug?.appliedStrategy
-      ? JSON.stringify(response.debug.appliedStrategy, null, 2)
-      : ''
-    debugKnowledgeContext.value = response?.debug?.knowledgeContext ?? ''
-    debugKnowledgeQuery.value = response?.debug?.knowledgeQuery ?? ''
-    debugKnowledgeRecall.value = response?.debug?.knowledgeRecall
-      ? JSON.stringify(response.debug.knowledgeRecall, null, 2)
-      : ''
-    debugKnowledgeRerank.value = response?.debug?.knowledgeRerank
-      ? JSON.stringify(response.debug.knowledgeRerank, null, 2)
-      : ''
-    debugKnowledgeChunks.value = response?.debug?.knowledgeChunks ?? []
-    debugTelemetry.value = response?.debug?.telemetry
-      ? JSON.stringify(response.debug.telemetry, null, 2)
-      : ''
-    if (import.meta.env.DEV && response?.debug?.timings) {
-      console.info('[copycat][playground][timings]', {
-        requestId,
-        stage: 'enhanced',
-        timings: response.debug.timings,
-        knowledgeRecall: response.debug.knowledgeRecall,
-        knowledgeRerank: response.debug.knowledgeRerank,
-      })
-    }
+    assignDebugState(response.debug)
     queueGhostSync()
   }
   catch (error) {
@@ -457,23 +427,67 @@ function clearAll() {
   debugRawChoice.value = ''
   debugUserPrompt.value = ''
   debugSystemPrompt.value = ''
-  debugKnowledgeContext.value = ''
-  debugKnowledgeQuery.value = ''
-  debugKnowledgeRecall.value = ''
-  debugKnowledgeRerank.value = ''
-  debugKnowledgeChunks.value = []
   stageFastCompletion.value = ''
   stageEnhancedCompletion.value = ''
   stageEnhancedTriggered.value = false
   stageEnhancedReplaced.value = false
   stageEnhancedRequested.value = false
-  debugAppliedStrategy.value = ''
-  debugTelemetry.value = ''
+  clearDebugState()
   lastRequestId.value = ''
   lastLatencyMs.value = null
   lastFingerprint.value = ''
   debouncedRequest.cancel()
   queueGhostSync()
+}
+
+function assignDebugState(debug: CompletionResponse['debug']) {
+  debugRawCompletion.value = debug?.rawCompletion ?? ''
+  debugSanitizedCompletion.value = debug?.sanitizedCompletion ?? ''
+  debugRawChoice.value = debug?.rawChoice ?? ''
+  debugUserPrompt.value = debug?.requestBody.userPrompt ?? ''
+  debugSystemPrompt.value = debug?.requestBody.systemPrompt ?? ''
+  debugAppliedStrategy.value = debug?.appliedStrategy
+    ? JSON.stringify(debug.appliedStrategy, null, 2)
+    : ''
+  debugKnowledgeContext.value = debug?.knowledgeContext ?? ''
+  debugKnowledgeQuery.value = debug?.knowledgeQuery ?? ''
+  debugKnowledgeRecall.value = debug?.knowledgeRecall
+    ? JSON.stringify(debug.knowledgeRecall, null, 2)
+    : ''
+  debugKnowledgeRerank.value = debug?.knowledgeRerank
+    ? JSON.stringify(debug.knowledgeRerank, null, 2)
+    : ''
+  debugKnowledgeChunks.value = debug?.knowledgeChunks ?? []
+  debugTelemetry.value = debug?.telemetry
+    ? JSON.stringify(debug.telemetry, null, 2)
+    : ''
+  debugTimings.value = debug?.timings
+    ? JSON.stringify(debug.timings, null, 2)
+    : ''
+}
+
+function clearDebugState() {
+  debugAppliedStrategy.value = ''
+  debugKnowledgeContext.value = ''
+  debugKnowledgeQuery.value = ''
+  debugKnowledgeRecall.value = ''
+  debugKnowledgeRerank.value = ''
+  debugKnowledgeChunks.value = []
+  debugTelemetry.value = ''
+  debugTimings.value = ''
+}
+
+function parseDebugTimings(raw: string): CompletionDebugInfo['timings'] | null {
+  if (!raw) {
+    return null
+  }
+
+  try {
+    return JSON.parse(raw) as CompletionDebugInfo['timings']
+  }
+  catch {
+    return null
+  }
 }
 
 function insertSample() {
@@ -633,6 +647,36 @@ function openOptions() {
           </div>
 
           <div class="card">
+            <h2 class="mb-4 text-base font-semibold">Timings</h2>
+            <dl class="space-y-3 text-sm">
+              <div v-for="[label, value] in timingSummary" :key="label">
+                <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  {{ label }}
+                </dt>
+                <dd class="mt-1 text-neutral-800">{{ value }}</dd>
+              </div>
+              <div v-if="timingSummary.length === 0" class="text-sm text-neutral-400">
+                No timing data yet.
+              </div>
+            </dl>
+          </div>
+
+          <div class="card">
+            <h2 class="mb-4 text-base font-semibold">Knowledge timings</h2>
+            <dl class="space-y-3 text-sm">
+              <div v-for="[label, value] in knowledgeTimingSummary" :key="label">
+                <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  {{ label }}
+                </dt>
+                <dd class="mt-1 text-neutral-800">{{ value }}</dd>
+              </div>
+              <div v-if="knowledgeTimingSummary.length === 0" class="text-sm text-neutral-400">
+                No knowledge timing data yet.
+              </div>
+            </dl>
+          </div>
+
+          <div class="card">
             <h2 class="mb-4 text-base font-semibold">Stage activity</h2>
             <dl class="space-y-3 text-sm">
               <div>
@@ -741,6 +785,12 @@ function openOptions() {
                   Knowledge chunks
                 </div>
                 <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeChunks.length ? JSON.stringify(debugKnowledgeChunks, null, 2) : '(empty)' }}</pre>
+              </div>
+              <div>
+                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  Timings
+                </div>
+                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugTimings || '(empty)' }}</pre>
               </div>
               <div>
                 <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">

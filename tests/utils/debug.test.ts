@@ -77,6 +77,9 @@ describe('buildCompletionDebugInfo', () => {
           queryEmbeddingMs: 15,
           searchMs: 11,
           contextMs: 3,
+          allChunkCount: 4,
+          embeddedChunkCount: 4,
+          semanticState: 'computed',
         },
         chunks: [
           {
@@ -120,6 +123,9 @@ describe('buildCompletionDebugInfo', () => {
           queryEmbeddingMs: 15,
           searchMs: 11,
           contextMs: 3,
+          allChunkCount: 4,
+          embeddedChunkCount: 4,
+          semanticState: 'computed',
         },
       },
       knowledgeQuery: '虚拟列表',

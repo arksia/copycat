@@ -581,6 +581,9 @@ export default defineBackground(() => {
           queryEmbeddingMs: 0,
           searchMs: 0,
           contextMs: 0,
+          allChunkCount: 0,
+          embeddedChunkCount: 0,
+          semanticState: 'skipped',
         },
       }
     }
@@ -590,22 +593,25 @@ export default defineBackground(() => {
       if (query.length === 0) {
         return {
           chunks: [],
-          timings: {
-            totalMs: Math.round(performance.now() - resolutionStart),
-            loadChunksMs: 0,
-            queryEmbeddingMs: 0,
-            searchMs: 0,
-            contextMs: 0,
-          },
-        }
+        timings: {
+          totalMs: Math.round(performance.now() - resolutionStart),
+          loadChunksMs: 0,
+          queryEmbeddingMs: 0,
+          searchMs: 0,
+          contextMs: 0,
+          allChunkCount: 0,
+          embeddedChunkCount: 0,
+          semanticState: 'skipped',
+        },
       }
+    }
 
       const loadChunksStart = performance.now()
       const allChunks = await listKnowledgeChunks(defaultKnowledgeBaseId)
       const loadChunksMs = Math.round(performance.now() - loadChunksStart)
       const embeddedChunkCount = allChunks.filter(hasCurrentKnowledgeEmbedding).length
       const queryEmbeddingStart = performance.now()
-      const semanticMeta = await resolveSemanticQueryEmbedding(query, embeddedChunkCount)
+      const semanticResolution = await resolveSemanticQueryEmbedding(query, embeddedChunkCount)
       const queryEmbeddingMs = Math.round(performance.now() - queryEmbeddingStart)
 
       const searchStart = performance.now()
@@ -614,7 +620,7 @@ export default defineBackground(() => {
         kbId: defaultKnowledgeBaseId,
         query,
         topK: budget.topK,
-        semanticMeta,
+        semanticMeta: semanticResolution?.meta,
       })
       const searchMs = Math.round(performance.now() - searchStart)
       const chunks = result.chunks
@@ -631,6 +637,9 @@ export default defineBackground(() => {
         queryEmbeddingMs,
         searchMs,
         contextMs,
+        allChunkCount: allChunks.length,
+        embeddedChunkCount,
+        semanticState: semanticResolution?.state ?? 'skipped',
       }
 
       if (packedKnowledge.length > 0) {
@@ -664,6 +673,9 @@ export default defineBackground(() => {
         queryEmbeddingMs: 0,
         searchMs: 0,
         contextMs: 0,
+        allChunkCount: 0,
+        embeddedChunkCount: 0,
+        semanticState: 'skipped',
       },
     }
   }
@@ -717,22 +729,30 @@ export default defineBackground(() => {
     query: string,
     embeddedChunkCount: number,
   ): Promise<{
-    backend: KnowledgeChunkEmbedding['backend']
-    latencyMs: number
-    model: string
-    queryEmbedding: number[]
+    meta?: {
+      backend: KnowledgeChunkEmbedding['backend']
+      latencyMs: number
+      model: string
+      queryEmbedding: number[]
+    }
+    state: 'cache_hit' | 'computed' | 'skipped'
   } | undefined> {
     try {
       if (embeddedChunkCount <= 1) {
-        return undefined
+        return {
+          state: 'skipped',
+        }
       }
 
       const cached = semanticQueryEmbeddingCache.get(query)
       if (cached !== undefined) {
         if (cached.expiresAt > Date.now()) {
           return {
-            ...cached.result,
-            latencyMs: 0,
+            meta: {
+              ...cached.result,
+              latencyMs: 0,
+            },
+            state: 'cache_hit',
           }
         }
 
@@ -769,11 +789,16 @@ export default defineBackground(() => {
         result: resolved,
       })
 
-      return resolved
+      return {
+        meta: resolved,
+        state: 'computed',
+      }
     }
     catch (error) {
       console.warn('[copycat] query embedding skipped', error)
-      return undefined
+      return {
+        state: 'skipped',
+      }
     }
   }
 
