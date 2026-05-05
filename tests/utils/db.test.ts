@@ -217,12 +217,28 @@ describe('indexeddb repositories', () => {
       expect.objectContaining({ id: 'doc-1', title: 'Virtual List Notes' }),
     ])
 
-    expect(await searchKnowledgeChunks({
+    const result = await searchKnowledgeChunks({
       kbId: 'default',
       query: '如何优化虚拟列表滚动性能',
       topK: 2,
-    })).toEqual([
+    })
+
+    expect(result.chunks).toEqual([
       expect.objectContaining({ id: 'chunk-1' }),
     ])
+    expect(result.recall).toEqual(expect.objectContaining({
+      strategy: 'keyword_index',
+      candidateCount: 1,
+      returnedCount: 1,
+    }))
+    expect(result.recall.queryTerms).toEqual(expect.arrayContaining(['虚拟', '列表', '滚动', '性能']))
+    expect(result.rerank).toEqual(expect.objectContaining({
+      strategy: 'lexical_v1',
+      semanticEnabled: false,
+    }))
+    expect(result.rerank.rankedChunks[0]).toEqual(expect.objectContaining({
+      id: 'chunk-1',
+      sourceName: 'Virtual List Notes',
+    }))
   })
 })

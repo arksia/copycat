@@ -39,6 +39,8 @@ const debugUserPrompt = ref('')
 const debugSystemPrompt = ref('')
 const debugKnowledgeContext = ref('')
 const debugKnowledgeQuery = ref('')
+const debugKnowledgeRecall = ref('')
+const debugKnowledgeRerank = ref('')
 const debugKnowledgeChunks = ref<Array<{
   id: string
   sourceName: string
@@ -217,10 +219,25 @@ async function requestCompletion() {
       : ''
     debugKnowledgeContext.value = response?.debug?.knowledgeContext ?? ''
     debugKnowledgeQuery.value = response?.debug?.knowledgeQuery ?? ''
+    debugKnowledgeRecall.value = response?.debug?.knowledgeRecall
+      ? JSON.stringify(response.debug.knowledgeRecall, null, 2)
+      : ''
+    debugKnowledgeRerank.value = response?.debug?.knowledgeRerank
+      ? JSON.stringify(response.debug.knowledgeRerank, null, 2)
+      : ''
     debugKnowledgeChunks.value = response?.debug?.knowledgeChunks ?? []
     debugTelemetry.value = response?.debug?.telemetry
       ? JSON.stringify(response.debug.telemetry, null, 2)
       : ''
+    if (import.meta.env.DEV && response?.debug?.timings) {
+      console.info('[copycat][playground][timings]', {
+        requestId,
+        stage: 'fast',
+        timings: response.debug.timings,
+        knowledgeRecall: response.debug.knowledgeRecall,
+        knowledgeRerank: response.debug.knowledgeRerank,
+      })
+    }
     queueGhostSync()
     if (!suggestion.value) {
       infoText.value
@@ -243,6 +260,8 @@ async function requestCompletion() {
     debugAppliedStrategy.value = ''
     debugKnowledgeContext.value = ''
     debugKnowledgeQuery.value = ''
+    debugKnowledgeRecall.value = ''
+    debugKnowledgeRerank.value = ''
     debugKnowledgeChunks.value = []
     debugTelemetry.value = ''
     queueGhostSync()
@@ -302,10 +321,25 @@ async function requestEnhancedCompletion(args: {
       : ''
     debugKnowledgeContext.value = response?.debug?.knowledgeContext ?? ''
     debugKnowledgeQuery.value = response?.debug?.knowledgeQuery ?? ''
+    debugKnowledgeRecall.value = response?.debug?.knowledgeRecall
+      ? JSON.stringify(response.debug.knowledgeRecall, null, 2)
+      : ''
+    debugKnowledgeRerank.value = response?.debug?.knowledgeRerank
+      ? JSON.stringify(response.debug.knowledgeRerank, null, 2)
+      : ''
     debugKnowledgeChunks.value = response?.debug?.knowledgeChunks ?? []
     debugTelemetry.value = response?.debug?.telemetry
       ? JSON.stringify(response.debug.telemetry, null, 2)
       : ''
+    if (import.meta.env.DEV && response?.debug?.timings) {
+      console.info('[copycat][playground][timings]', {
+        requestId,
+        stage: 'enhanced',
+        timings: response.debug.timings,
+        knowledgeRecall: response.debug.knowledgeRecall,
+        knowledgeRerank: response.debug.knowledgeRerank,
+      })
+    }
     queueGhostSync()
   }
   catch (error) {
@@ -420,16 +454,21 @@ function clearAll() {
   infoText.value = ''
   debugRawCompletion.value = ''
   debugSanitizedCompletion.value = ''
-    debugRawChoice.value = ''
-    debugUserPrompt.value = ''
-    debugSystemPrompt.value = ''
-    stageFastCompletion.value = ''
-    stageEnhancedCompletion.value = ''
-    stageEnhancedTriggered.value = false
-    stageEnhancedReplaced.value = false
-    stageEnhancedRequested.value = false
-    debugAppliedStrategy.value = ''
-    debugTelemetry.value = ''
+  debugRawChoice.value = ''
+  debugUserPrompt.value = ''
+  debugSystemPrompt.value = ''
+  debugKnowledgeContext.value = ''
+  debugKnowledgeQuery.value = ''
+  debugKnowledgeRecall.value = ''
+  debugKnowledgeRerank.value = ''
+  debugKnowledgeChunks.value = []
+  stageFastCompletion.value = ''
+  stageEnhancedCompletion.value = ''
+  stageEnhancedTriggered.value = false
+  stageEnhancedReplaced.value = false
+  stageEnhancedRequested.value = false
+  debugAppliedStrategy.value = ''
+  debugTelemetry.value = ''
   lastRequestId.value = ''
   lastLatencyMs.value = null
   lastFingerprint.value = ''
@@ -678,6 +717,18 @@ function openOptions() {
                   Knowledge query
                 </div>
                 <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeQuery || '(empty)' }}</pre>
+              </div>
+              <div>
+                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  Knowledge recall
+                </div>
+                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeRecall || '(empty)' }}</pre>
+              </div>
+              <div>
+                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  Knowledge rerank
+                </div>
+                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeRerank || '(empty)' }}</pre>
               </div>
               <div>
                 <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">

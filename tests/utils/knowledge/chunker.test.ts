@@ -10,11 +10,24 @@ describe('extractKnowledgeKeywords', () => {
       extractKnowledgeKeywords('使用虚拟列表优化 long list performance'),
     ).toEqual(expect.arrayContaining([
       '使用虚拟列表优化',
+      '虚拟列表',
       '虚拟',
       '列表',
       'long',
       'list',
       'performance',
+    ]))
+  })
+
+  it('keeps multi-character han phrases before falling back to shorter windows', () => {
+    const terms = extractKnowledgeKeywords('虚拟列表渲染性能')
+
+    expect(terms).toEqual(expect.arrayContaining([
+      '虚拟列表',
+      '列表渲染',
+      '渲染性能',
+      '虚拟列',
+      '渲染',
     ]))
   })
 })

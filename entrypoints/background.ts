@@ -1,9 +1,11 @@
 import type {
+  CompletionDebugInfo,
   CompletionError,
   CompletionEventStats,
   CompletionRequest,
   CompletionResponse,
   KnowledgeChunk,
+  KnowledgeChunkEmbedding,
   KnowledgeDeleteResult,
   KnowledgeImportRequest,
   KnowledgeImportResult,
@@ -22,6 +24,7 @@ import {
   putCompletionEvent,
 } from '~/utils/db/repositories/events'
 import {
+  listKnowledgeChunks,
   deleteKnowledgeDocument,
   listKnowledgeDocuments,
   putKnowledgeChunks,
@@ -39,6 +42,7 @@ import {
   buildKnowledgeDocumentRecord,
   computeKnowledgeChecksum,
 } from '~/utils/knowledge/import'
+import { hasCurrentKnowledgeEmbedding } from '~/utils/knowledge/embedding'
 import { completeOnce, completeOnceDetailed } from '~/utils/completion/client'
 import { loadSettings, saveSettings } from '~/utils/settings'
 import { deriveCompletionQualitySignal } from '~/utils/completion/telemetry'
@@ -47,11 +51,21 @@ export default defineBackground(() => {
   const defaultKnowledgeBaseId = 'default'
   const knowledgeContextMaxChars = 900
   const knowledgeTopK = 2
+  const semanticQueryCacheTtlMs = 30_000
   const telemetryWindowSize = 20
   let creatingOffscreenDocument: Promise<void> | null = null
   const inFlight = new Map<string, AbortController>()
   const requestSignalKeys = new Map<string, string>()
   const completionCache = new CompletionMemoryCache()
+  const semanticQueryEmbeddingCache = new Map<string, {
+    expiresAt: number
+    result: {
+      backend: KnowledgeChunkEmbedding['backend']
+      latencyMs: number
+      model: string
+      queryEmbedding: number[]
+    }
+  }>()
 
   chrome.runtime.onInstalled.addListener((details) => {
     if (details.reason === 'install') {
@@ -178,7 +192,7 @@ export default defineBackground(() => {
 
       case 'knowledge/search':
         void searchKnowledgeChunks(message.payload)
-          .then(result => sendResponse({ ok: true, data: result }))
+          .then(result => sendResponse({ ok: true, data: result.chunks }))
           .catch((error: unknown) => {
             sendResponse({
               ok: false,
@@ -193,6 +207,7 @@ export default defineBackground(() => {
   })
 
   async function handleCompletion(req: CompletionRequest): Promise<CompletionResponse> {
+    const requestStart = performance.now()
     const requestStage = req.stage ?? 'fast'
     if (req.signalKey !== undefined && req.signalKey.length > 0) {
       cancelBySignalKey(req.signalKey)
@@ -201,7 +216,9 @@ export default defineBackground(() => {
       cancel(req.id)
     }
 
+    const settingsStart = performance.now()
     const settings = await loadSettings()
+    const settingsMs = Math.round(performance.now() - settingsStart)
     if (!settings.enabled) {
       return emptyResponse(req.id, settings.provider, settings.model, requestStage)
     }
@@ -210,10 +227,12 @@ export default defineBackground(() => {
     }
 
     const telemetryHost = resolveTelemetryHostFromRequest(req)
+    const telemetryStart = performance.now()
     const telemetryStats
       = telemetryHost !== null && telemetryHost.length > 0
         ? await getCompletionEventStats(telemetryHost, telemetryWindowSize)
         : null
+    const telemetryMs = Math.round(performance.now() - telemetryStart)
     const qualitySignal = telemetryStats === null ? undefined : deriveCompletionQualitySignal(telemetryStats)
     const shouldRunEnhancedStage = requestStage === 'fast' && qualitySignal?.shouldBoostKnowledge === true
     const knowledgeBudget = requestStage === 'enhanced'
@@ -226,11 +245,13 @@ export default defineBackground(() => {
           topK: knowledgeTopK,
           maxChars: knowledgeContextMaxChars,
         }
+    const knowledgeStart = performance.now()
     const knowledgeResolution = await resolveCompletionKnowledge(
       req,
       settings.minPrefixChars,
       knowledgeBudget,
     )
+    const knowledgeMs = Math.round(performance.now() - knowledgeStart)
     const completionContext = mergeCompletionContext(req.context, knowledgeResolution.context)
     const cacheKey = buildCompletionCacheKey({
       provider: settings.provider,
@@ -273,7 +294,7 @@ export default defineBackground(() => {
       requestSignalKeys.set(req.signalKey, req.id)
     }
 
-    const start = performance.now()
+    const llmStart = performance.now()
     try {
       const detailed = req.debug
         ? await completeOnceDetailed({
@@ -305,10 +326,32 @@ export default defineBackground(() => {
           console.warn('[copycat] failed to persist completion cache', error)
         })
       }
+      const llmMs = Math.round(performance.now() - llmStart)
+      const totalMs = Math.round(performance.now() - requestStart)
+      const timings = {
+        totalMs,
+        settingsMs,
+        telemetryMs,
+        knowledgeMs,
+        llmMs,
+      }
+
+      logDevCompletionTimings({
+        id: req.id,
+        stage: requestStage,
+        prefixLength: req.prefix.length,
+        timings: {
+          ...timings,
+          knowledge: knowledgeResolution.timings,
+        },
+        recallStrategy: knowledgeResolution.recall?.strategy,
+        rerankStrategy: knowledgeResolution.rerank?.strategy,
+      })
+
       return {
         id: req.id,
         completion,
-        latencyMs: Math.round(performance.now() - start),
+        latencyMs: llmMs,
         provider: settings.provider,
         model: settings.model,
         stage: requestStage,
@@ -320,6 +363,7 @@ export default defineBackground(() => {
             telemetryWindowSize,
             knowledgeBudget,
           },
+          timings,
           knowledgeResolution,
           telemetry: telemetryStats === null
             ? undefined
@@ -442,12 +486,17 @@ export default defineBackground(() => {
       docId: document.id,
       kbId: document.kbId,
     }))
+    const embeddings = await embedKnowledgeChunks(finalChunks)
+    const embeddedChunks = finalChunks.map((chunk, index) => ({
+      ...chunk,
+      embedding: embeddings[index],
+    }))
 
     await putKnowledgeDocument(document)
-    await putKnowledgeChunks(finalChunks)
+    await putKnowledgeChunks(embeddedChunks)
 
     return {
-      chunkCount: finalChunks.length,
+      chunkCount: embeddedChunks.length,
       document,
     }
   }
@@ -485,7 +534,7 @@ export default defineBackground(() => {
   async function sendOffscreenMessage<T>(message: {
     payload: Record<string, unknown>
     target: 'offscreen'
-    type: 'knowledge/process-markdown'
+    type: 'knowledge/embed-texts' | 'knowledge/process-markdown'
   }): Promise<T> {
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage(message, (response: {
@@ -518,41 +567,105 @@ export default defineBackground(() => {
     chunks: KnowledgeChunk[]
     context?: string
     query?: string
+    recall?: CompletionDebugInfo['knowledgeRecall']
+    rerank?: CompletionDebugInfo['knowledgeRerank']
+    timings?: NonNullable<CompletionDebugInfo['timings']>['knowledge']
   }> {
+    const resolutionStart = performance.now()
     if (req.prefix.trim().length < minPrefixChars) {
-      return { chunks: [] }
+      return {
+        chunks: [],
+        timings: {
+          totalMs: Math.round(performance.now() - resolutionStart),
+          loadChunksMs: 0,
+          queryEmbeddingMs: 0,
+          searchMs: 0,
+          contextMs: 0,
+        },
+      }
     }
 
     try {
       const query = buildKnowledgeSearchQuery(req.prefix)
       if (query.length === 0) {
-        return { chunks: [] }
+        return {
+          chunks: [],
+          timings: {
+            totalMs: Math.round(performance.now() - resolutionStart),
+            loadChunksMs: 0,
+            queryEmbeddingMs: 0,
+            searchMs: 0,
+            contextMs: 0,
+          },
+        }
       }
 
-      const chunks = await searchKnowledgeChunks({
+      const loadChunksStart = performance.now()
+      const allChunks = await listKnowledgeChunks(defaultKnowledgeBaseId)
+      const loadChunksMs = Math.round(performance.now() - loadChunksStart)
+      const embeddedChunkCount = allChunks.filter(hasCurrentKnowledgeEmbedding).length
+      const queryEmbeddingStart = performance.now()
+      const semanticMeta = await resolveSemanticQueryEmbedding(query, embeddedChunkCount)
+      const queryEmbeddingMs = Math.round(performance.now() - queryEmbeddingStart)
+
+      const searchStart = performance.now()
+      const result = await searchKnowledgeChunks({
+        chunks: allChunks,
         kbId: defaultKnowledgeBaseId,
         query,
         topK: budget.topK,
+        semanticMeta,
       })
+      const searchMs = Math.round(performance.now() - searchStart)
+      const chunks = result.chunks
+      const contextStart = performance.now()
       const packedKnowledge = buildKnowledgeContext({
         chunks,
         maxChars: budget.maxChars,
         maxChunks: budget.topK,
       })
+      const contextMs = Math.round(performance.now() - contextStart)
+      const timings = {
+        totalMs: Math.round(performance.now() - resolutionStart),
+        loadChunksMs,
+        queryEmbeddingMs,
+        searchMs,
+        contextMs,
+      }
 
       if (packedKnowledge.length > 0) {
         return {
           chunks,
           context: packedKnowledge,
           query,
+          recall: result.recall,
+          rerank: result.rerank,
+          timings,
         }
+      }
+
+      return {
+        chunks,
+        query,
+        recall: result.recall,
+        rerank: result.rerank,
+        timings,
       }
     }
     catch (error) {
       console.warn('[copycat] knowledge retrieval skipped', error)
     }
 
-    return { chunks: [] }
+    return {
+      chunks: [],
+      timings: {
+        totalMs: Math.round(performance.now() - resolutionStart),
+        loadChunksMs: 0,
+        queryEmbeddingMs: 0,
+        searchMs: 0,
+        contextMs: 0,
+      },
+    }
   }
 
   function mergeCompletionContext(
@@ -571,5 +684,118 @@ export default defineBackground(() => {
       return req.signalKey.split('::')[0] ?? null
     }
     return null
+  }
+
+  async function embedKnowledgeChunks(chunks: KnowledgeChunk[]): Promise<Array<KnowledgeChunkEmbedding | undefined>> {
+    if (chunks.length === 0) {
+      return []
+    }
+
+    try {
+      const result = await sendOffscreenMessage<{
+        backend: KnowledgeChunkEmbedding['backend']
+        latencyMs: number
+        model: string
+        vectors: KnowledgeChunkEmbedding[]
+      }>({
+        payload: {
+          texts: chunks.map(chunk => chunk.text),
+        },
+        target: 'offscreen',
+        type: 'knowledge/embed-texts',
+      })
+
+      return result.vectors
+    }
+    catch (error) {
+      console.warn('[copycat] knowledge chunk embedding skipped', error)
+      return chunks.map(() => undefined)
+    }
+  }
+
+  async function resolveSemanticQueryEmbedding(
+    query: string,
+    embeddedChunkCount: number,
+  ): Promise<{
+    backend: KnowledgeChunkEmbedding['backend']
+    latencyMs: number
+    model: string
+    queryEmbedding: number[]
+  } | undefined> {
+    try {
+      if (embeddedChunkCount <= 1) {
+        return undefined
+      }
+
+      const cached = semanticQueryEmbeddingCache.get(query)
+      if (cached !== undefined) {
+        if (cached.expiresAt > Date.now()) {
+          return {
+            ...cached.result,
+            latencyMs: 0,
+          }
+        }
+
+        semanticQueryEmbeddingCache.delete(query)
+      }
+
+      const result = await sendOffscreenMessage<{
+        backend: KnowledgeChunkEmbedding['backend']
+        latencyMs: number
+        model: string
+        vectors: KnowledgeChunkEmbedding[]
+      }>({
+        payload: {
+          texts: [query],
+        },
+        target: 'offscreen',
+        type: 'knowledge/embed-texts',
+      })
+
+      const queryEmbedding = result.vectors[0]?.values
+      if (queryEmbedding === undefined) {
+        return undefined
+      }
+
+      const resolved = {
+        backend: result.backend,
+        latencyMs: result.latencyMs,
+        model: result.model,
+        queryEmbedding,
+      }
+
+      semanticQueryEmbeddingCache.set(query, {
+        expiresAt: Date.now() + semanticQueryCacheTtlMs,
+        result: resolved,
+      })
+
+      return resolved
+    }
+    catch (error) {
+      console.warn('[copycat] query embedding skipped', error)
+      return undefined
+    }
+  }
+
+  function logDevCompletionTimings(args: {
+    id: string
+    stage: 'enhanced' | 'fast'
+    prefixLength: number
+    timings: NonNullable<CompletionDebugInfo['timings']>
+    recallStrategy?: NonNullable<CompletionDebugInfo['knowledgeRecall']>['strategy']
+    rerankStrategy?: NonNullable<CompletionDebugInfo['knowledgeRerank']>['strategy']
+  }) {
+    if (!import.meta.env.DEV) {
+      return
+    }
+
+    console.info('[copycat][timings]', {
+      id: args.id,
+      stage: args.stage,
+      prefixLength: args.prefixLength,
+      recallStrategy: args.recallStrategy ?? 'none',
+      rerankStrategy: args.rerankStrategy ?? 'none',
+      timings: args.timings,
+    })
   }
 })

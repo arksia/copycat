@@ -26,10 +26,14 @@ export interface BuildCompletionDebugInfoArgs {
       maxChars: number
     }
   }
+  timings: NonNullable<CompletionDebugInfo['timings']>
   knowledgeResolution: {
     chunks: KnowledgeChunk[]
     context?: string
     query?: string
+    recall?: CompletionDebugInfo['knowledgeRecall']
+    rerank?: CompletionDebugInfo['knowledgeRerank']
+    timings?: NonNullable<CompletionDebugInfo['timings']>['knowledge']
   }
   telemetry?: {
     host: string
@@ -61,6 +65,10 @@ export function buildCompletionDebugInfo(
   return {
     ...debug,
     appliedStrategy: args.appliedStrategy,
+    timings: {
+      ...args.timings,
+      knowledge: args.knowledgeResolution.timings,
+    },
     knowledgeChunks: args.knowledgeResolution.chunks.map(chunk => ({
       id: chunk.id,
       sourceName: chunk.metadata.sourceName,
@@ -68,6 +76,8 @@ export function buildCompletionDebugInfo(
     })),
     knowledgeContext: args.knowledgeResolution.context,
     knowledgeQuery: args.knowledgeResolution.query,
+    knowledgeRecall: args.knowledgeResolution.recall,
+    knowledgeRerank: args.knowledgeResolution.rerank,
     telemetry: args.telemetry === undefined
       ? undefined
       : {

@@ -22,7 +22,7 @@ export const DB_NAME = 'copycat'
  * Returns:
  * - the active database version integer
  */
-export const DB_VERSION = 2
+export const DB_VERSION = 3
 
 /**
  * Shared object-store names used by the local data layer.

@@ -28,11 +28,11 @@ export default defineConfig({
       page: 'options.html',
       open_in_tab: true,
     },
-    ...(env.command === 'serve'
-      ? {
-          content_security_policy: DEV_EXTENSION_CSP,
-        }
-      : {}),
+    content_security_policy: env.command === 'serve'
+      ? DEV_EXTENSION_CSP
+      : {
+          extension_pages: 'script-src \'self\' \'wasm-unsafe-eval\'; object-src \'self\';',
+        },
   }),
   vite: () => ({
     css: {

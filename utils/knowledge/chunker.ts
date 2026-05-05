@@ -92,7 +92,7 @@ export function chunkKnowledgeDocument(
  * - `"使用虚拟列表优化长列表渲染 performance"`
  *
  * After:
- * - `["使用虚拟列表优化长列表渲染", "使用", "虚拟", "列表", "优化", "performance"]`
+ * - `["使用虚拟列表优化长列表渲染", "使用虚拟", "虚拟列表", "列表优化", "使用虚", "虚拟列", "long", "performance"]`
  */
 export function extractKnowledgeKeywords(text: string): string[] {
   const normalized = text.toLowerCase()
@@ -108,14 +108,25 @@ export function extractKnowledgeKeywords(text: string): string[] {
   for (const match of normalized.matchAll(/\p{Script=Han}+/gu)) {
     const value = match[0]
     if (value.length >= 2) {
-      keywords.add(value)
-      for (let index = 0; index <= value.length - 2; index += 1) {
-        keywords.add(value.slice(index, index + 2))
-      }
+      collectHanTerms(keywords, value)
     }
   }
 
   return [...keywords]
+}
+
+function collectHanTerms(keywords: Set<string>, value: string) {
+  keywords.add(value)
+
+  for (const windowSize of [4, 3, 2]) {
+    if (value.length < windowSize) {
+      continue
+    }
+
+    for (let index = 0; index <= value.length - windowSize; index += 1) {
+      keywords.add(value.slice(index, index + windowSize))
+    }
+  }
 }
 
 function splitLongParagraph(paragraph: string, maxChars: number): string[] {

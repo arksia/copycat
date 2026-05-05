@@ -9,6 +9,16 @@ export interface ProviderPreset {
   docsUrl?: string
 }
 
+export type KnowledgeEmbeddingBackend = 'wasm' | 'webgpu'
+
+export interface KnowledgeChunkEmbedding {
+  backend: KnowledgeEmbeddingBackend
+  embeddedAt: number
+  model: string
+  values: number[]
+  version: string
+}
+
 export interface Settings {
   enabled: boolean
   provider: ProviderId
@@ -48,8 +58,48 @@ export interface CompletionDebugInfo {
       maxChars: number
     }
   }
+  timings?: {
+    totalMs: number
+    settingsMs: number
+    telemetryMs: number
+    knowledgeMs: number
+    llmMs: number
+    knowledge?: {
+      totalMs: number
+      loadChunksMs: number
+      queryEmbeddingMs: number
+      searchMs: number
+      contextMs: number
+    }
+  }
   knowledgeContext?: string
   knowledgeQuery?: string
+  knowledgeRecall?: {
+    strategy: 'keyword_index' | 'semantic_index'
+    queryTerms: string[]
+    candidateCount: number
+    returnedCount: number
+  }
+  knowledgeRerank?: {
+    strategy: 'lexical_v1' | 'semantic_primary_v1'
+    semanticEnabled: boolean
+    semanticBackend?: KnowledgeEmbeddingBackend
+    semanticModel?: string
+    semanticQueryLatencyMs?: number
+    queryTerms: string[]
+    rankedChunks: Array<{
+      id: string
+      sourceName: string
+      totalScore: number
+      lexicalScore: number
+      semanticScore: number | null
+      matchedTerms: number
+      keywordHits: number
+      textHits: number
+      tokenCount: number
+      charCount: number
+    }>
+  }
   knowledgeChunks?: Array<{
     id: string
     sourceName: string
@@ -154,6 +204,7 @@ export interface KnowledgeChunk {
   docId: string
   text: string
   keywords: string[]
+  embedding?: KnowledgeChunkEmbedding
   metadata: {
     charCount: number
     sourceName: string

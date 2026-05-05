@@ -40,11 +40,11 @@ Current progress is best described as **Phase 3 in progress**:
 - ✅ Tab accept, Esc dismiss, typing-through-suggestion, IME-safe request suppression
 - ✅ Options UI, popup toggle, playground, model discovery, debug preview
 - ✅ IndexedDB local completion cache, telemetry store, and knowledge document storage
-- ✅ Markdown knowledge import, chunking, lexical retrieval, and prompt packing
+- ✅ Markdown knowledge import, chunking, local embeddings, semantic-first retrieval, and prompt packing
 - ✅ Extensible editor adapter layer, with current delivery priority on native text inputs
 - ✅ Staged completion flow plus local telemetry-driven retrieval budget tuning
 - ⏳ Phase 1b — ProseMirror / richer editor adapter with CSS Highlight API-style native rendering
-- ⏳ Phase 3 — Soul / Prompt Skills / richer retrieval beyond lexical matching
+- ⏳ Phase 3 — Soul / Prompt Skills / stronger semantic retrieval and grounding quality
 - ⏳ Phase 4 — WebGPU local inference as the default completion path
 
 See the [Design Doc](#design-notes) at the bottom for details.
