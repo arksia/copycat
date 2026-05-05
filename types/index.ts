@@ -78,13 +78,13 @@ export interface CompletionDebugInfo {
   knowledgeContext?: string
   knowledgeQuery?: string
   knowledgeRecall?: {
-    strategy: 'keyword_index' | 'semantic_index'
+    strategy: 'semantic_index'
     queryTerms: string[]
     candidateCount: number
     returnedCount: number
   }
   knowledgeRerank?: {
-    strategy: 'lexical_v1' | 'semantic_primary_v1'
+    strategy: 'semantic_only_v1'
     semanticEnabled: boolean
     semanticBackend?: KnowledgeEmbeddingBackend
     semanticModel?: string
@@ -193,6 +193,7 @@ export interface KnowledgeDocument {
   sourceType: KnowledgeSourceType
   sourceUri?: string
   checksum: string
+  embedding?: KnowledgeChunkEmbedding
   metadata: {
     chunkCount: number
     charCount: number

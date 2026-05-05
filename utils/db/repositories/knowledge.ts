@@ -38,6 +38,37 @@ export async function listKnowledgeChunks(kbId: string): Promise<KnowledgeChunk[
 }
 
 /**
+ * Lists stored knowledge chunks for a specific set of documents.
+ *
+ * Use when:
+ * - retrieval already narrowed the candidate documents
+ * - callers want to avoid scanning the whole knowledge base
+ *
+ * Expects:
+ * - `docIds` to contain stable persisted document ids
+ *
+ * Returns:
+ * - all chunks belonging to the requested documents
+ */
+export async function listKnowledgeChunksByDocumentIds(docIds: string[]): Promise<KnowledgeChunk[]> {
+  if (docIds.length === 0) {
+    return []
+  }
+
+  const db = await openCopycatDb()
+  const transaction = db.transaction(DB_STORES.knowledgeChunks, 'readonly')
+  const index = transaction
+    .objectStore(DB_STORES.knowledgeChunks)
+    .index(DB_INDEXES.knowledgeChunksByDocument)
+  const chunkGroups = await Promise.all(docIds.map(docId => requestToPromise(
+    index.getAll(IDBKeyRange.only(docId)) as IDBRequest<KnowledgeChunk[]>,
+  )))
+
+  await transactionToPromise(transaction)
+  return chunkGroups.flat()
+}
+
+/**
  * Persists one knowledge document record.
  *
  * Use when:
@@ -177,48 +208,26 @@ export async function searchKnowledgeChunks(args: {
 }): Promise<SearchKnowledgeChunksResult> {
   const queryTerms = extractKnowledgeKeywords(args.query)
   const allChunks = args.chunks ?? await listKnowledgeChunks(args.kbId)
-  if (queryTerms.length === 0) {
+  if (args.semanticMeta === undefined) {
     return {
       chunks: [],
       recall: {
-        strategy: args.semanticMeta === undefined ? 'keyword_index' : 'semantic_index',
+        strategy: 'semantic_index',
         queryTerms,
-        candidateCount: args.semanticMeta === undefined ? 0 : allChunks.length,
+        candidateCount: 0,
         returnedCount: 0,
       },
       rerank: {
-        strategy: args.semanticMeta === undefined ? 'lexical_v1' : 'semantic_primary_v1',
-        semanticEnabled: args.semanticMeta !== undefined,
-        semanticBackend: args.semanticMeta?.backend,
-        semanticModel: args.semanticMeta?.model,
-        semanticQueryLatencyMs: args.semanticMeta?.latencyMs,
+        strategy: 'semantic_only_v1',
+        semanticEnabled: false,
         queryTerms,
         rankedChunks: [],
       },
     }
   }
 
-  const candidates = new Map<string, KnowledgeChunk>()
-
-  if (args.semanticMeta === undefined) {
-    for (const chunk of allChunks) {
-      const keywordSet = new Set(chunk.keywords)
-      for (const term of queryTerms) {
-        if (keywordSet.has(term) || chunk.text.toLowerCase().includes(term)) {
-          candidates.set(chunk.id, chunk)
-          break
-        }
-      }
-    }
-  }
-  else {
-    for (const chunk of allChunks) {
-      candidates.set(chunk.id, chunk)
-    }
-  }
-
   const result = retrieveKnowledge({
-    chunks: [...candidates.values()],
+    chunks: allChunks,
     query: args.query,
     semantic: args.semanticMeta === undefined
       ? undefined
@@ -229,12 +238,9 @@ export async function searchKnowledgeChunks(args: {
     topK: args.topK,
   })
 
-  const rerankStrategy: NonNullable<CompletionDebugInfo['knowledgeRerank']>['strategy']
-    = args.semanticMeta === undefined ? 'lexical_v1' : 'semantic_primary_v1'
-
   const rerank = {
     ...result.rerank,
-    strategy: rerankStrategy,
+    strategy: 'semantic_only_v1' as const,
     semanticBackend: args.semanticMeta?.backend,
     semanticModel: args.semanticMeta?.model,
     semanticQueryLatencyMs: args.semanticMeta?.latencyMs,
@@ -243,9 +249,9 @@ export async function searchKnowledgeChunks(args: {
   return {
     chunks: result.chunks,
     recall: {
-      strategy: args.semanticMeta === undefined ? 'keyword_index' : 'semantic_index',
+      strategy: 'semantic_index',
       queryTerms,
-      candidateCount: candidates.size,
+      candidateCount: allChunks.length,
       returnedCount: result.chunks.length,
     },
     rerank,

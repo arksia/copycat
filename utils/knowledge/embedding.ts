@@ -75,6 +75,68 @@ export function hasCurrentKnowledgeEmbedding(chunk: KnowledgeChunk): boolean {
 }
 
 /**
+ * Builds one document embedding by averaging embedded chunk vectors.
+ *
+ * Use when:
+ * - imported chunks already have persisted embeddings
+ * - document-level recall needs one stable vector per document
+ *
+ * Expects:
+ * - usable embeddings to share one vector dimension
+ *
+ * Returns:
+ * - one normalized document embedding, or `undefined` when no usable vectors exist
+ */
+export function buildKnowledgeDocumentEmbedding(
+  embeddings: Array<KnowledgeChunkEmbedding | undefined>,
+): KnowledgeChunkEmbedding | undefined {
+  const usableEmbeddings = embeddings.filter(
+    (embedding): embedding is KnowledgeChunkEmbedding => embedding !== undefined && embedding.values.length > 0,
+  )
+  if (usableEmbeddings.length === 0) {
+    return undefined
+  }
+
+  const dimension = usableEmbeddings[0]?.values.length ?? 0
+  if (dimension === 0) {
+    return undefined
+  }
+
+  const sums = new Array<number>(dimension).fill(0)
+  let sampleCount = 0
+
+  for (const embedding of usableEmbeddings) {
+    if (embedding.values.length !== dimension) {
+      continue
+    }
+
+    sampleCount += 1
+    for (let index = 0; index < dimension; index += 1) {
+      sums[index] += embedding.values[index] ?? 0
+    }
+  }
+
+  if (sampleCount === 0) {
+    return undefined
+  }
+
+  const averagedValues = sums.map(value => value / sampleCount)
+  const normalizedValues = normalizeEmbeddingVector(averagedValues)
+  if (normalizedValues === undefined) {
+    return undefined
+  }
+
+  const firstEmbedding = usableEmbeddings[0]
+
+  return buildKnowledgeChunkEmbedding({
+    backend: firstEmbedding.backend,
+    model: firstEmbedding.model,
+    values: normalizedValues,
+    version: firstEmbedding.version,
+  })
+}
+
+/**
  * Embeds one or more texts with the local browser runtime.
  *
  * Use when:
@@ -173,4 +235,19 @@ function isArrayLikeNumberSource(value: unknown): value is ArrayLike<number | bi
   return typeof value === 'object'
     && value !== null
     && 'length' in value
+}
+
+function normalizeEmbeddingVector(values: number[]): number[] | undefined {
+  let norm = 0
+
+  for (const value of values) {
+    norm += value * value
+  }
+
+  if (norm === 0) {
+    return undefined
+  }
+
+  const divisor = Math.sqrt(norm)
+  return values.map(value => value / divisor)
 }

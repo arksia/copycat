@@ -24,7 +24,7 @@ import {
   putCompletionEvent,
 } from '~/utils/db/repositories/events'
 import {
-  listKnowledgeChunks,
+  listKnowledgeChunksByDocumentIds,
   deleteKnowledgeDocument,
   listKnowledgeDocuments,
   putKnowledgeChunks,
@@ -33,6 +33,7 @@ import {
 } from '~/utils/db/repositories/knowledge'
 import { buildCompletionDebugInfo } from '~/utils/completion/debug'
 import { resolveKnowledgeRetrievalBudget } from '~/utils/knowledge-budget'
+import { resolveSemanticSimilarity } from '~/utils/knowledge/retriever'
 import {
   buildKnowledgeContext,
   buildKnowledgeSearchQuery,
@@ -42,7 +43,7 @@ import {
   buildKnowledgeDocumentRecord,
   computeKnowledgeChecksum,
 } from '~/utils/knowledge/import'
-import { hasCurrentKnowledgeEmbedding } from '~/utils/knowledge/embedding'
+import { buildKnowledgeDocumentEmbedding } from '~/utils/knowledge/embedding'
 import { completeOnce, completeOnceDetailed } from '~/utils/completion/client'
 import { loadSettings, saveSettings } from '~/utils/settings'
 import { deriveCompletionQualitySignal } from '~/utils/completion/telemetry'
@@ -51,6 +52,7 @@ export default defineBackground(() => {
   const defaultKnowledgeBaseId = 'default'
   const knowledgeContextMaxChars = 900
   const knowledgeTopK = 2
+  const knowledgeDocumentTopK = 3
   const semanticQueryCacheTtlMs = 30_000
   const telemetryWindowSize = 20
   let creatingOffscreenDocument: Promise<void> | null = null
@@ -491,13 +493,17 @@ export default defineBackground(() => {
       ...chunk,
       embedding: embeddings[index],
     }))
+    const embeddedDocument = {
+      ...document,
+      embedding: buildKnowledgeDocumentEmbedding(embeddings),
+    }
 
-    await putKnowledgeDocument(document)
+    await putKnowledgeDocument(embeddedDocument)
     await putKnowledgeChunks(embeddedChunks)
 
     return {
       chunkCount: embeddedChunks.length,
-      document,
+      document: embeddedDocument,
     }
   }
 
@@ -604,19 +610,42 @@ export default defineBackground(() => {
           semanticState: 'skipped',
         },
       }
-    }
+      }
 
       const loadChunksStart = performance.now()
-      const allChunks = await listKnowledgeChunks(defaultKnowledgeBaseId)
+      const documents = await listKnowledgeDocuments(defaultKnowledgeBaseId)
+      const allChunkCount = documents.reduce(
+        (total, document) => total + Number(document.metadata.chunkCount ?? 0),
+        0,
+      )
+      const embeddedDocuments = documents.filter(document => {
+        const embedding = document.embedding
+        return embedding !== undefined && embedding.values.length > 0
+      })
+      const embeddedChunkCount = documents.reduce(
+        (total, document) => {
+          const embedding = document.embedding
+          if (embedding === undefined || embedding.values.length === 0) {
+            return total
+          }
+          return total + Number(document.metadata.chunkCount ?? 0)
+        },
+        0,
+      )
       const loadChunksMs = Math.round(performance.now() - loadChunksStart)
-      const embeddedChunkCount = allChunks.filter(hasCurrentKnowledgeEmbedding).length
       const queryEmbeddingStart = performance.now()
-      const semanticResolution = await resolveSemanticQueryEmbedding(query, embeddedChunkCount)
+      const semanticResolution = await resolveSemanticQueryEmbedding(query, embeddedDocuments.length)
       const queryEmbeddingMs = Math.round(performance.now() - queryEmbeddingStart)
+      const candidateDocIds = selectKnowledgeDocumentIds({
+        documents: embeddedDocuments,
+        limit: knowledgeDocumentTopK,
+        queryEmbedding: semanticResolution?.meta?.queryEmbedding,
+      })
+      const candidateChunks = await listKnowledgeChunksByDocumentIds(candidateDocIds)
 
       const searchStart = performance.now()
       const result = await searchKnowledgeChunks({
-        chunks: allChunks,
+        chunks: candidateChunks,
         kbId: defaultKnowledgeBaseId,
         query,
         topK: budget.topK,
@@ -637,7 +666,7 @@ export default defineBackground(() => {
         queryEmbeddingMs,
         searchMs,
         contextMs,
-        allChunkCount: allChunks.length,
+        allChunkCount,
         embeddedChunkCount,
         semanticState: semanticResolution?.state ?? 'skipped',
       }
@@ -738,7 +767,7 @@ export default defineBackground(() => {
     state: 'cache_hit' | 'computed' | 'skipped'
   } | undefined> {
     try {
-      if (embeddedChunkCount <= 1) {
+      if (embeddedChunkCount === 0) {
         return {
           state: 'skipped',
         }
@@ -822,5 +851,33 @@ export default defineBackground(() => {
       rerankStrategy: args.rerankStrategy ?? 'none',
       timings: args.timings,
     })
+  }
+
+  function selectKnowledgeDocumentIds(args: {
+    documents: Array<Awaited<ReturnType<typeof listKnowledgeDocuments>>[number]>
+    limit: number
+    queryEmbedding?: number[]
+  }): string[] {
+    if (args.queryEmbedding === undefined) {
+      return []
+    }
+
+    return args.documents
+      .map((document) => {
+        const score = resolveSemanticSimilarity(document.embedding?.values, args.queryEmbedding)
+        return {
+          document,
+          score: score === null ? -1 : score,
+        }
+      })
+      .filter(item => item.score > 0)
+      .sort((left, right) => {
+        if (right.score !== left.score) {
+          return right.score - left.score
+        }
+        return right.document.updatedAt - left.document.updatedAt
+      })
+      .slice(0, args.limit)
+      .map(item => item.document.id)
   }
 })

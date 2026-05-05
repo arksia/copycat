@@ -12,6 +12,7 @@ import {
 } from '~/utils/db/repositories/events'
 import {
   listKnowledgeDocuments,
+  listKnowledgeChunksByDocumentIds,
   putKnowledgeChunks,
   putKnowledgeDocument,
   searchKnowledgeChunks,
@@ -179,6 +180,13 @@ describe('indexeddb repositories', () => {
       title: 'Virtual List Notes',
       sourceType: 'markdown',
       checksum: 'abc',
+      embedding: {
+        backend: 'wasm',
+        embeddedAt: 100,
+        model: 'test-model',
+        values: [1, 0],
+        version: 'test',
+      },
       metadata: {
         chunkCount: 1,
         charCount: 22,
@@ -193,6 +201,13 @@ describe('indexeddb repositories', () => {
         docId: 'doc-1',
         text: '虚拟列表适合处理长列表渲染和滚动性能问题。',
         keywords: ['虚拟列表', '虚拟', '列表', '滚动', '性能'],
+        embedding: {
+          backend: 'wasm',
+          embeddedAt: 100,
+          model: 'test-model',
+          values: [1, 0],
+          version: 'test',
+        },
         metadata: {
           charCount: 24,
           sourceName: 'Virtual List Notes',
@@ -205,6 +220,13 @@ describe('indexeddb repositories', () => {
         docId: 'doc-2',
         text: '这个 chunk 属于另一个知识库。',
         keywords: ['知识库'],
+        embedding: {
+          backend: 'wasm',
+          embeddedAt: 100,
+          model: 'test-model',
+          values: [0, 1],
+          version: 'test',
+        },
         metadata: {
           charCount: 16,
           sourceName: 'Other',
@@ -214,12 +236,24 @@ describe('indexeddb repositories', () => {
     ])
 
     expect(await listKnowledgeDocuments('default')).toEqual([
-      expect.objectContaining({ id: 'doc-1', title: 'Virtual List Notes' }),
+      expect.objectContaining({
+        id: 'doc-1',
+        title: 'Virtual List Notes',
+        embedding: expect.objectContaining({
+          model: 'test-model',
+        }),
+      }),
     ])
 
     const result = await searchKnowledgeChunks({
       kbId: 'default',
       query: '如何优化虚拟列表滚动性能',
+      semanticMeta: {
+        backend: 'wasm',
+        latencyMs: 8,
+        model: 'test-model',
+        queryEmbedding: [1, 0],
+      },
       topK: 2,
     })
 
@@ -227,18 +261,21 @@ describe('indexeddb repositories', () => {
       expect.objectContaining({ id: 'chunk-1' }),
     ])
     expect(result.recall).toEqual(expect.objectContaining({
-      strategy: 'keyword_index',
+      strategy: 'semantic_index',
       candidateCount: 1,
       returnedCount: 1,
     }))
     expect(result.recall.queryTerms).toEqual(expect.arrayContaining(['虚拟', '列表', '滚动', '性能']))
     expect(result.rerank).toEqual(expect.objectContaining({
-      strategy: 'lexical_v1',
-      semanticEnabled: false,
+      strategy: 'semantic_only_v1',
+      semanticEnabled: true,
     }))
     expect(result.rerank.rankedChunks[0]).toEqual(expect.objectContaining({
       id: 'chunk-1',
       sourceName: 'Virtual List Notes',
     }))
+    expect(await listKnowledgeChunksByDocumentIds(['doc-1'])).toEqual([
+      expect.objectContaining({ id: 'chunk-1' }),
+    ])
   })
 })

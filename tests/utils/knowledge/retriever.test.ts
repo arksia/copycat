@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { retrieveKnowledge } from '~/utils/knowledge/retriever'
 
 describe('retrieveKnowledge', () => {
-  it('prefers chunks with the strongest lexical overlap', () => {
+  it('returns no ranked chunks when semantic embeddings are unavailable', () => {
     const chunks: KnowledgeChunk[] = [
       {
         id: 'a',
@@ -29,22 +29,16 @@ describe('retrieveKnowledge', () => {
       topK: 1,
     })
 
-    expect(results.chunks).toEqual([chunks[0]])
+    expect(results.chunks).toEqual([])
     expect(results.rerank).toEqual({
-      strategy: 'lexical_v1',
+      strategy: 'semantic_only_v1',
       semanticEnabled: false,
       queryTerms: expect.arrayContaining(['虚拟', '列表', '渲染']),
-      rankedChunks: [
-        expect.objectContaining({
-          id: 'a',
-          sourceName: 'A',
-          semanticScore: null,
-        }),
-      ],
+      rankedChunks: [],
     })
   })
 
-  it('prefers the more focused chunk when overlap is otherwise similar', () => {
+  it('prefers the more focused chunk when semantic score is otherwise similar', () => {
     const chunks: KnowledgeChunk[] = [
       {
         id: 'focused',
@@ -52,6 +46,13 @@ describe('retrieveKnowledge', () => {
         docId: 'doc-1',
         text: 'virtual list performance',
         keywords: ['virtual', 'list', 'performance'],
+        embedding: {
+          backend: 'wasm',
+          embeddedAt: 100,
+          model: 'test-model',
+          values: [1, 0],
+          version: 'test',
+        },
         metadata: { charCount: 24, sourceName: 'Focused', tokenCount: 3 },
       },
       {
@@ -60,6 +61,13 @@ describe('retrieveKnowledge', () => {
         docId: 'doc-2',
         text: 'virtual list performance with extra caching metrics background noise',
         keywords: ['virtual', 'list', 'performance', 'caching', 'metrics', 'background', 'noise'],
+        embedding: {
+          backend: 'wasm',
+          embeddedAt: 100,
+          model: 'test-model',
+          values: [1, 0],
+          version: 'test',
+        },
         metadata: { charCount: 68, sourceName: 'Noisy', tokenCount: 7 },
       },
     ]
@@ -67,14 +75,18 @@ describe('retrieveKnowledge', () => {
     const results = retrieveKnowledge({
       chunks,
       query: 'virtual list performance',
+      semantic: {
+        enabled: true,
+        queryEmbedding: [1, 0],
+      },
       topK: 1,
     })
 
     expect(results.chunks).toEqual([chunks[0]])
     expect(results.rerank?.rankedChunks[0]).toEqual(expect.objectContaining({
       id: 'focused',
-      lexicalScore: 9,
-      totalScore: 9,
+      semanticScore: 1,
+      totalScore: 1,
       matchedTerms: 3,
       keywordHits: 3,
       textHits: 0,
@@ -83,8 +95,8 @@ describe('retrieveKnowledge', () => {
     }))
     expect(results.rerank?.rankedChunks[1]).toEqual(expect.objectContaining({
       id: 'noisy',
-      lexicalScore: 9,
-      totalScore: 9,
+      semanticScore: 1,
+      totalScore: 1,
       matchedTerms: 3,
       keywordHits: 3,
       textHits: 0,
@@ -93,7 +105,7 @@ describe('retrieveKnowledge', () => {
     }))
   })
 
-  it('uses semantic score as a bounded boost when embeddings are available', () => {
+  it('ranks chunks by semantic score when embeddings are available', () => {
     const chunks: KnowledgeChunk[] = [
       {
         id: 'lexical-lead',
@@ -141,13 +153,13 @@ describe('retrieveKnowledge', () => {
     expect(results.rerank.rankedChunks[0]).toEqual(expect.objectContaining({
       id: 'lexical-lead',
       semanticScore: 1,
-      totalScore: 12,
+      totalScore: 1,
     }))
     expect(results.rerank.rankedChunks[1]).toEqual(expect.objectContaining({
       id: 'semantic-boosted',
       lexicalScore: 0,
       semanticScore: 1,
-      totalScore: 3,
+      totalScore: 1,
     }))
   })
 })

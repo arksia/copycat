@@ -44,13 +44,13 @@ describe('buildCompletionDebugInfo', () => {
         query: '虚拟列表',
         context: '[Knowledge]\n虚拟列表适合处理长列表渲染。',
         recall: {
-          strategy: 'keyword_index',
+          strategy: 'semantic_index',
           queryTerms: ['虚拟列表', '滚动', '性能'],
           candidateCount: 4,
           returnedCount: 1,
         },
         rerank: {
-          strategy: 'lexical_v1',
+          strategy: 'semantic_only_v1',
           semanticEnabled: false,
           semanticBackend: 'wasm',
           semanticModel: 'test-model',
@@ -130,13 +130,13 @@ describe('buildCompletionDebugInfo', () => {
       },
       knowledgeQuery: '虚拟列表',
       knowledgeRecall: {
-        strategy: 'keyword_index',
+        strategy: 'semantic_index',
         queryTerms: ['虚拟列表', '滚动', '性能'],
         candidateCount: 4,
         returnedCount: 1,
       },
       knowledgeRerank: {
-        strategy: 'lexical_v1',
+        strategy: 'semantic_only_v1',
         semanticEnabled: false,
         semanticBackend: 'wasm',
         semanticModel: 'test-model',

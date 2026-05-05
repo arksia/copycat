@@ -49,12 +49,12 @@ export interface RetrieveKnowledgeResult {
  */
 export function retrieveKnowledge(args: RetrieveKnowledgeArgs): RetrieveKnowledgeResult {
   const queryTerms = extractKnowledgeKeywords(args.query)
-  if (queryTerms.length === 0 && args.semantic?.queryEmbedding === undefined) {
+  if (args.semantic?.queryEmbedding === undefined) {
     return {
       chunks: [],
       rerank: {
-        strategy: args.semantic?.enabled === true ? 'semantic_primary_v1' : 'lexical_v1',
-        semanticEnabled: args.semantic?.enabled === true,
+        strategy: 'semantic_only_v1',
+        semanticEnabled: false,
         queryTerms,
         rankedChunks: [],
       },
@@ -83,7 +83,7 @@ export function retrieveKnowledge(args: RetrieveKnowledgeArgs): RetrieveKnowledg
   return {
     chunks: selectedChunks,
     rerank: {
-      strategy: args.semantic?.enabled === true ? 'semantic_primary_v1' : 'lexical_v1',
+      strategy: 'semantic_only_v1',
       semanticEnabled: args.semantic?.enabled === true,
       queryTerms,
       rankedChunks: rankedChunks.map(item => ({
@@ -127,10 +127,8 @@ function scoreKnowledgeChunk(
     }
   }
 
-  const semanticScore = resolveSemanticScore(chunk.embedding?.values, queryEmbedding)
-  const totalScore = semanticScore === null
-    ? lexicalScore
-    : lexicalScore + Math.max(0, semanticScore) * 3
+  const semanticScore = resolveSemanticSimilarity(chunk.embedding?.values, queryEmbedding)
+  const totalScore = semanticScore === null ? 0 : Math.max(0, semanticScore)
 
   return {
     lexicalScore,
@@ -142,7 +140,7 @@ function scoreKnowledgeChunk(
   }
 }
 
-function resolveSemanticScore(
+export function resolveSemanticSimilarity(
   chunkEmbedding: number[] | undefined,
   queryEmbedding: number[] | undefined,
 ): number | null {
