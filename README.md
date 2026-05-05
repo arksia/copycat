@@ -43,9 +43,15 @@ Current progress is best described as **Phase 3 in progress**:
 - ✅ Markdown knowledge import, chunking, local embeddings, semantic-first retrieval, and prompt packing
 - ✅ Extensible editor adapter layer, with current delivery priority on native text inputs
 - ✅ Staged completion flow plus local telemetry-driven retrieval budget tuning
+- ✅ Document-level semantic recall on top of chunk-level semantic rerank
 - ⏳ Phase 1b — ProseMirror / richer editor adapter with CSS Highlight API-style native rendering
 - ⏳ Phase 3 — Soul / Prompt Skills / stronger semantic retrieval and grounding quality
 - ⏳ Phase 4 — WebGPU local inference as the default completion path
+
+Phase 3 retrieval follow-ups already identified:
+
+- versioned query embedding cache
+- versioned document recall cache
 
 See the [Design Doc](#design-notes) at the bottom for details.
 
@@ -153,7 +159,7 @@ See [`docs/roadmap.md`](./docs/roadmap.md) for the full
 plan. Short version:
 
 1. **Phase 1b** — ProseMirror + richer editor adapter, with more native ghost-text rendering.
-2. **Phase 3** — Richer retrieval, Soul / Prompt Skills, and better grounding quality.
+2. **Phase 3** — Soul / Prompt Skills, plus remaining retrieval follow-ups such as versioned query/document recall caches.
 4. **Phase 4** — WebGPU on-device inference, with remote mode retained as an explicit fallback choice.
 
 ## License
