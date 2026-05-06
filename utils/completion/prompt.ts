@@ -7,14 +7,14 @@ import type { Settings, SoulProfile } from '~/types'
  * - `{ identity: "工程师", style: "", preferences: "先给结论", avoidances: "", terms: "", notes: "" }`
  *
  * After:
- * - `[Identity]\n工程师\n\n[Preferences]\n先给结论`
+ * - `[Role Context]\n工程师\n\n[Writing Preferences]\n- 先给结论`
  */
 export function buildSoulContext(soul: Settings['soul']): string {
   if (!soul.enabled) {
     return ''
   }
 
-  const sections = buildSoulSections(soul.profile)
+  const sections = buildSoulBlocks(soul.profile)
   return sections.length > 0 ? sections.join('\n\n') : ''
 }
 
@@ -60,24 +60,56 @@ export function buildCompletionUserPrompt(args: {
   return userParts.join('\n\n')
 }
 
-function buildSoulSections(profile: SoulProfile): string[] {
-  const sections: string[] = []
+function buildSoulBlocks(profile: SoulProfile): string[] {
+  const blocks: string[] = []
+  const writingPreferences = compactLines([
+    profile.style,
+    profile.preferences,
+  ])
 
-  pushSoulSection(sections, 'Identity', profile.identity)
-  pushSoulSection(sections, 'Style', profile.style)
-  pushSoulSection(sections, 'Preferences', profile.preferences)
-  pushSoulSection(sections, 'Avoid', profile.avoidances)
-  pushSoulSection(sections, 'Terms', profile.terms)
-  pushSoulSection(sections, 'Notes', profile.notes)
+  pushSoulTextBlock(blocks, 'Role Context', profile.identity)
+  pushSoulListBlock(blocks, 'Writing Preferences', writingPreferences)
+  pushSoulListBlock(blocks, 'Hard Constraints', compactLines([profile.avoidances]))
+  pushSoulListBlock(blocks, 'Preferred Terms', compactLines([profile.terms]))
+  pushSoulTextBlock(blocks, 'Additional Notes', profile.notes)
 
-  return sections
+  if (blocks.length === 0) {
+    return []
+  }
+
+  blocks.push(buildApplicationRulesBlock())
+  return blocks
 }
 
-function pushSoulSection(target: string[], label: string, value: string) {
+function pushSoulTextBlock(target: string[], label: string, value: string) {
   const content = value.trim()
   if (!content) {
     return
   }
 
   target.push(`[${label}]\n${content}`)
+}
+
+function pushSoulListBlock(target: string[], label: string, values: string[]) {
+  if (values.length === 0) {
+    return
+  }
+
+  target.push(`[${label}]\n${values.map(value => `- ${value}`).join('\n')}`)
+}
+
+function compactLines(values: string[]): string[] {
+  return values
+    .flatMap(value => value.split(/\r?\n/))
+    .map(value => value.trim())
+    .filter(Boolean)
+}
+
+function buildApplicationRulesBlock(): string {
+  return [
+    '[Application Rules]',
+    '- Apply these Soul cues only when they are naturally relevant to the current prefix.',
+    '- Prefer influencing wording, structure, and terminology choices instead of restating these cues.',
+    '- If Soul conflicts with the current user intent, follow the current user intent.',
+  ].join('\n')
 }
