@@ -3,6 +3,7 @@ import {
   buildOpenAICompatibleHeaders,
   joinOpenAICompatibleUrl,
 } from '../openai-compatible'
+import { buildCompletionUserPrompt, buildSoulContext } from './prompt'
 
 /**
  * Arguments for a single inline completion request.
@@ -105,7 +106,13 @@ export async function completeOnceDetailed({
   signal,
 }: CompleteArgs): Promise<CompleteResult> {
   const url = joinOpenAICompatibleUrl(settings.baseUrl, '/chat/completions')
-  const userPrompt = buildUserPrompt({ prefix, suffix, context })
+  const soulContext = buildSoulContext(settings.soul)
+  const userPrompt = buildCompletionUserPrompt({
+    prefix,
+    suffix,
+    context,
+    soulContext,
+  })
   const body = buildChatCompletionBody({
     model: settings.model,
     systemPrompt: settings.systemPrompt,
@@ -138,31 +145,16 @@ export async function completeOnceDetailed({
       sanitizedCompletion: completion,
       rawChoice: safeStringify(choice ?? null),
       cacheHit: false,
+      soulContext,
+      soulEnabled: soulContext.length > 0,
+      soulConfigured: settings.soul.enabled,
+      soulCharCount: soulContext.length,
       requestBody: {
         systemPrompt: settings.systemPrompt,
         userPrompt,
       },
     },
   }
-}
-
-function buildUserPrompt(args: {
-  prefix: string
-  suffix?: string
-  context?: string
-}): string {
-  const userParts: string[] = []
-  if (args.context !== undefined && args.context.trim().length > 0) {
-    userParts.push(`[Knowledge]\n${args.context.trim()}`)
-  }
-  userParts.push(
-    `[Prefix]\n${args.prefix}\n\n[Task]\nContinue the prefix with a short, natural continuation. `
-    + `Output ONLY the continuation text, without repeating the prefix.`,
-  )
-  if (args.suffix !== undefined && args.suffix.trim().length > 0) {
-    userParts.push(`[Suffix after cursor]\n${args.suffix}`)
-  }
-  return userParts.join('\n\n')
 }
 
 function buildChatCompletionBody(args: {

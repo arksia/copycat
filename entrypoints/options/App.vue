@@ -22,12 +22,19 @@ import {
   parseModelListResponse,
 } from '~/utils/openai-compatible'
 import { PROVIDER_ORDER, PROVIDER_PRESETS, resolveProviderPreset } from '~/utils/providers'
-import { DEFAULT_SETTINGS, DEFAULT_SYSTEM_PROMPT, loadSettings, saveSettings } from '~/utils/settings'
+import {
+  DEFAULT_SETTINGS,
+  DEFAULT_SYSTEM_PROMPT,
+  buildDefaultSettings,
+  loadSettings,
+  saveSettings,
+} from '~/utils/settings'
 import { loadTelemetrySnapshot } from '~/utils/completion/telemetry'
+import { buildSoulContext } from '~/utils/completion/prompt'
 
 const DEFAULT_KB_ID = 'default'
 
-const settings = ref<Settings>({ ...DEFAULT_SETTINGS })
+const settings = ref<Settings>(buildDefaultSettings())
 const loaded = ref(false)
 const saving = ref(false)
 const toast = ref<{ kind: 'ok' | 'err', text: string } | null>(null)
@@ -51,6 +58,7 @@ const telemetryError = ref('')
 const loadingTelemetry = ref(false)
 
 const provider = computed(() => resolveProviderPreset(settings.value.provider))
+const soulPreview = computed(() => buildSoulContext(settings.value.soul))
 
 onMounted(async () => {
   try {
@@ -62,7 +70,7 @@ onMounted(async () => {
   catch (error) {
     loadError.value
       = error instanceof Error ? error.message : 'Failed to load settings. Defaults are shown instead.'
-    settings.value = { ...DEFAULT_SETTINGS }
+    settings.value = buildDefaultSettings()
     hostsText.value = DEFAULT_SETTINGS.enabledHosts.join('\n')
   }
   finally {
@@ -112,7 +120,7 @@ function resetSystemPrompt() {
 function resetAll() {
   if (!confirm('Reset all settings to defaults? Your API key will be cleared.'))
     return
-  settings.value = { ...DEFAULT_SETTINGS }
+  settings.value = buildDefaultSettings()
   hostsText.value = DEFAULT_SETTINGS.enabledHosts.join('\n')
 }
 
@@ -516,6 +524,92 @@ async function runKnowledgeSearch() {
             rows="6"
             class="input h-auto py-2 font-mono text-xs leading-relaxed"
           />
+        </div>
+      </section>
+
+      <section class="card mb-6">
+        <div class="mb-4 flex items-center justify-between gap-3">
+          <div>
+            <h2 class="text-base font-semibold">Soul</h2>
+            <p class="mt-1 text-sm text-neutral-500">
+              Persistent identity, style, and preferences injected into completion requests.
+            </p>
+          </div>
+          <label class="flex items-center gap-2 text-sm">
+            <input
+              v-model="settings.soul.enabled"
+              type="checkbox"
+              class="h-4 w-4 rounded border-neutral-300 text-brand-600 focus:ring-brand-500"
+            />
+            <span>{{ settings.soul.enabled ? 'Enabled' : 'Disabled' }}</span>
+          </label>
+        </div>
+
+        <div class="grid grid-cols-1 gap-4">
+          <div>
+            <label class="label">Identity</label>
+            <textarea
+              v-model="settings.soul.profile.identity"
+              rows="3"
+              class="input h-auto py-2 font-mono text-xs"
+              placeholder="Who you are, what you work on, and the long-term context the model should know."
+            />
+          </div>
+
+          <div>
+            <label class="label">Style</label>
+            <textarea
+              v-model="settings.soul.profile.style"
+              rows="3"
+              class="input h-auto py-2 font-mono text-xs"
+              placeholder="Preferred tone, pacing, and writing style."
+            />
+          </div>
+
+          <div>
+            <label class="label">Preferences</label>
+            <textarea
+              v-model="settings.soul.profile.preferences"
+              rows="3"
+              class="input h-auto py-2 font-mono text-xs"
+              placeholder="Default preferences such as local-first, concise answers, or conclusion-first structure."
+            />
+          </div>
+
+          <div>
+            <label class="label">Avoidances</label>
+            <textarea
+              v-model="settings.soul.profile.avoidances"
+              rows="3"
+              class="input h-auto py-2 font-mono text-xs"
+              placeholder="Patterns, tone, or habits the model should avoid."
+            />
+          </div>
+
+          <div>
+            <label class="label">Terms</label>
+            <textarea
+              v-model="settings.soul.profile.terms"
+              rows="2"
+              class="input h-auto py-2 font-mono text-xs"
+              placeholder="Common project terms, preferred naming, or domain vocabulary."
+            />
+          </div>
+
+          <div>
+            <label class="label">Notes</label>
+            <textarea
+              v-model="settings.soul.profile.notes"
+              rows="3"
+              class="input h-auto py-2 font-mono text-xs"
+              placeholder="Free-form notes that do not fit the structured fields."
+            />
+          </div>
+        </div>
+
+        <div class="mt-4">
+          <div class="mb-2 text-sm font-medium text-neutral-700">Projected Soul Preview</div>
+          <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ soulPreview || '(empty)' }}</pre>
         </div>
       </section>
 

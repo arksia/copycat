@@ -9,6 +9,7 @@ export interface CompletionCacheKeyParts {
   prefix: string
   suffix?: string
   context?: string
+  soulContext?: string
 }
 
 /**
@@ -56,6 +57,7 @@ export function buildCompletionCacheKey(parts: CompletionCacheKeyParts): string 
     parts.prefix,
     parts.suffix ?? '',
     parts.context ?? '',
+    parts.soulContext ?? '',
   ].join('\u241F')
 }
 

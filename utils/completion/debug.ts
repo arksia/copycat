@@ -35,6 +35,10 @@ export interface BuildCompletionDebugInfoArgs {
     rerank?: CompletionDebugInfo['knowledgeRerank']
     timings?: NonNullable<CompletionDebugInfo['timings']>['knowledge']
   }
+  soul?: {
+    context: string
+    enabled: boolean
+  }
   telemetry?: {
     host: string
     stats: CompletionEventStats
@@ -74,6 +78,10 @@ export function buildCompletionDebugInfo(
       sourceName: chunk.metadata.sourceName,
       text: chunk.text,
     })),
+    soulContext: args.soul?.context ?? debug.soulContext,
+    soulEnabled: (args.soul?.context ?? debug.soulContext ?? '').length > 0,
+    soulConfigured: args.soul?.enabled ?? debug.soulConfigured,
+    soulCharCount: (args.soul?.context ?? debug.soulContext ?? '').length,
     knowledgeContext: args.knowledgeResolution.context,
     knowledgeQuery: args.knowledgeResolution.query,
     knowledgeRecall: args.knowledgeResolution.recall,

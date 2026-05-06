@@ -1,7 +1,20 @@
-import type { Settings } from '~/types'
+import type { Settings, SettingsPatch, SoulProfile, SoulSettings } from '~/types'
 import { PROVIDER_PRESETS } from './providers'
 
 const STORAGE_KEY = 'copycat:settings:v1'
+const DEFAULT_SOUL_PROFILE: SoulProfile = {
+  identity: '',
+  style: '',
+  preferences: '',
+  avoidances: '',
+  terms: '',
+  notes: '',
+}
+
+const DEFAULT_SOUL_SETTINGS: SoulSettings = {
+  enabled: false,
+  profile: { ...DEFAULT_SOUL_PROFILE },
+}
 
 /**
  * Default system prompt for inline autocomplete requests.
@@ -48,6 +61,10 @@ export const DEFAULT_SETTINGS: Settings = {
   debounceMs: 300,
   minPrefixChars: 3,
   systemPrompt: DEFAULT_SYSTEM_PROMPT,
+  soul: {
+    enabled: DEFAULT_SOUL_SETTINGS.enabled,
+    profile: { ...DEFAULT_SOUL_PROFILE },
+  },
   enabledHosts: [
     'chatgpt.com',
     'chat.openai.com',
@@ -61,6 +78,28 @@ export const DEFAULT_SETTINGS: Settings = {
     'chatglm.cn',
   ],
   disabledHosts: [],
+}
+
+/**
+ * Builds a fresh default settings object without sharing nested references.
+ *
+ * Use when:
+ * - UI state should be reset from defaults
+ * - callers must avoid mutating the exported `DEFAULT_SETTINGS` object graph
+ *
+ * Returns:
+ * - a new settings object with cloned nested arrays and Soul profile fields
+ */
+export function buildDefaultSettings(): Settings {
+  return {
+    ...DEFAULT_SETTINGS,
+    soul: {
+      enabled: DEFAULT_SOUL_SETTINGS.enabled,
+      profile: { ...DEFAULT_SOUL_PROFILE },
+    },
+    enabledHosts: DEFAULT_SETTINGS.enabledHosts.slice(),
+    disabledHosts: DEFAULT_SETTINGS.disabledHosts.slice(),
+  }
 }
 
 /**
@@ -133,9 +172,9 @@ export async function loadSettings(): Promise<Settings> {
  * Returns:
  * - the normalized settings object that was written to local storage
  */
-export async function saveSettings(patch: Partial<Settings>): Promise<Settings> {
+export async function saveSettings(patch: SettingsPatch): Promise<Settings> {
   const current = await loadSettings()
-  const next = normalizeSettingsShape({ ...current, ...patch })
+  const next = normalizeSettingsShape(mergeSettingsPatch(current, patch))
   await chrome.storage.local.set({ [STORAGE_KEY]: next })
   return next
 }
@@ -178,9 +217,10 @@ export function onSettingsChanged(handler: (next: Settings) => void): () => void
  */
 export function normalizeSettingsShape(stored: Partial<Settings>): Settings {
   return {
-    ...DEFAULT_SETTINGS,
+    ...buildDefaultSettings(),
     ...stored,
     provider: isProviderId(stored.provider) ? stored.provider : DEFAULT_SETTINGS.provider,
+    soul: normalizeSoulSettings(stored.soul),
     enabledHosts: normalizeHostList(stored.enabledHosts, DEFAULT_SETTINGS.enabledHosts),
     disabledHosts: normalizeHostList(stored.disabledHosts, DEFAULT_SETTINGS.disabledHosts),
     maxTokens: normalizeNumber(stored.maxTokens, DEFAULT_SETTINGS.maxTokens),
@@ -212,6 +252,60 @@ function normalizeHostList(value: unknown, fallback: string[]): string[] {
 
 function normalizeNumber(value: unknown, fallback: number): number {
   return typeof value === 'number' && Number.isFinite(value) ? value : fallback
+}
+
+function normalizeSoulSettings(value: unknown): SoulSettings {
+  if (typeof value !== 'object' || value === null) {
+    return {
+      enabled: DEFAULT_SOUL_SETTINGS.enabled,
+      profile: { ...DEFAULT_SOUL_PROFILE },
+    }
+  }
+
+  const raw = value as Partial<SoulSettings>
+  return {
+    enabled: typeof raw.enabled === 'boolean' ? raw.enabled : DEFAULT_SOUL_SETTINGS.enabled,
+    profile: normalizeSoulProfile(raw.profile),
+  }
+}
+
+function normalizeSoulProfile(value: unknown): SoulProfile {
+  if (typeof value !== 'object' || value === null) {
+    return { ...DEFAULT_SOUL_PROFILE }
+  }
+
+  const raw = value as Partial<SoulProfile>
+  return {
+    identity: normalizeSoulField(raw.identity),
+    style: normalizeSoulField(raw.style),
+    preferences: normalizeSoulField(raw.preferences),
+    avoidances: normalizeSoulField(raw.avoidances),
+    terms: normalizeSoulField(raw.terms),
+    notes: normalizeSoulField(raw.notes),
+  }
+}
+
+function normalizeSoulField(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+function mergeSettingsPatch(current: Settings, patch: SettingsPatch): Partial<Settings> {
+  return {
+    ...current,
+    ...patch,
+    soul: patch.soul === undefined
+      ? current.soul
+      : {
+          ...current.soul,
+          ...patch.soul,
+          profile: patch.soul.profile === undefined
+            ? current.soul.profile
+            : {
+                ...current.soul.profile,
+                ...patch.soul.profile,
+              },
+        },
+  }
 }
 
 /**

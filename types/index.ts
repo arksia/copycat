@@ -1,5 +1,26 @@
 export type ProviderId = 'groq' | 'openai' | 'deepseek' | 'ollama' | 'custom'
 
+export interface SoulProfile {
+  identity: string
+  style: string
+  preferences: string
+  avoidances: string
+  terms: string
+  notes: string
+}
+
+export interface SoulSettings {
+  enabled: boolean
+  profile: SoulProfile
+}
+
+export interface SettingsPatch extends Partial<Omit<Settings, 'soul'>> {
+  soul?: Partial<{
+    enabled: boolean
+    profile: Partial<SoulProfile>
+  }>
+}
+
 export interface ProviderPreset {
   id: ProviderId
   name: string
@@ -30,6 +51,7 @@ export interface Settings {
   debounceMs: number
   minPrefixChars: number
   systemPrompt: string
+  soul: SoulSettings
   enabledHosts: string[]
   disabledHosts: string[]
 }
@@ -76,6 +98,10 @@ export interface CompletionDebugInfo {
     }
   }
   knowledgeContext?: string
+  soulContext?: string
+  soulEnabled?: boolean
+  soulConfigured?: boolean
+  soulCharCount?: number
   knowledgeQuery?: string
   knowledgeRecall?: {
     strategy: 'semantic_index'
@@ -163,7 +189,7 @@ export type RuntimeMessage
     | { type: 'knowledge/list', payload: { kbId: string } }
     | { type: 'knowledge/search', payload: KnowledgeSearchRequest }
     | { type: 'settings/get' }
-    | { type: 'settings/set', payload: Partial<Settings> }
+    | { type: 'settings/set', payload: SettingsPatch }
 
 export interface CompletionEvent {
   id: string

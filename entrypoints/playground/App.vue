@@ -37,6 +37,7 @@ const debugSanitizedCompletion = ref('')
 const debugRawChoice = ref('')
 const debugUserPrompt = ref('')
 const debugSystemPrompt = ref('')
+const debugSoulContext = ref('')
 const debugKnowledgeContext = ref('')
 const debugKnowledgeQuery = ref('')
 const debugKnowledgeRecall = ref('')
@@ -54,6 +55,9 @@ const stageEnhancedReplaced = ref(false)
 const stageEnhancedRequested = ref(false)
 const debugAppliedStrategy = ref('')
 const debugTelemetry = ref('')
+const debugSoulEnabled = ref(false)
+const debugSoulConfigured = ref(false)
+const debugSoulCharCount = ref(0)
 const lastRequestId = ref('')
 const lastLatencyMs = ref<number | null>(null)
 const settings = ref<Settings | null>(null)
@@ -449,6 +453,10 @@ function assignDebugState(debug: CompletionResponse['debug']) {
   debugAppliedStrategy.value = debug?.appliedStrategy
     ? JSON.stringify(debug.appliedStrategy, null, 2)
     : ''
+  debugSoulContext.value = debug?.soulContext ?? ''
+  debugSoulEnabled.value = debug?.soulEnabled ?? false
+  debugSoulConfigured.value = debug?.soulConfigured ?? false
+  debugSoulCharCount.value = debug?.soulCharCount ?? 0
   debugKnowledgeContext.value = debug?.knowledgeContext ?? ''
   debugKnowledgeQuery.value = debug?.knowledgeQuery ?? ''
   debugKnowledgeRecall.value = debug?.knowledgeRecall
@@ -468,6 +476,10 @@ function assignDebugState(debug: CompletionResponse['debug']) {
 
 function clearDebugState() {
   debugAppliedStrategy.value = ''
+  debugSoulContext.value = ''
+  debugSoulEnabled.value = false
+  debugSoulConfigured.value = false
+  debugSoulCharCount.value = 0
   debugKnowledgeContext.value = ''
   debugKnowledgeQuery.value = ''
   debugKnowledgeRecall.value = ''
@@ -643,6 +655,20 @@ function openOptions() {
                 </dt>
                 <dd class="mt-1 text-neutral-800">{{ settings?.enabled ? 'yes' : 'no' }}</dd>
               </div>
+              <div>
+                <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  Soul
+                </dt>
+                <dd class="mt-1 text-neutral-800">
+                  {{
+                    debugSoulEnabled
+                      ? `projected · ${debugSoulCharCount} chars`
+                      : debugSoulConfigured
+                        ? 'configured · 0 chars'
+                        : 'disabled'
+                  }}
+                </dd>
+              </div>
             </dl>
           </div>
 
@@ -755,6 +781,12 @@ function openOptions() {
                   Applied strategy
                 </div>
                 <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugAppliedStrategy || '(empty)' }}</pre>
+              </div>
+              <div>
+                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  Soul context
+                </div>
+                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulContext || '(empty)' }}</pre>
               </div>
               <div>
                 <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">

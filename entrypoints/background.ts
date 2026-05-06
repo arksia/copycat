@@ -32,6 +32,7 @@ import {
   searchKnowledgeChunks,
 } from '~/utils/db/repositories/knowledge'
 import { buildCompletionDebugInfo } from '~/utils/completion/debug'
+import { buildSoulContext } from '~/utils/completion/prompt'
 import { resolveKnowledgeRetrievalBudget } from '~/utils/knowledge-budget'
 import { resolveSemanticSimilarity } from '~/utils/knowledge/retriever'
 import {
@@ -255,12 +256,14 @@ export default defineBackground(() => {
     )
     const knowledgeMs = Math.round(performance.now() - knowledgeStart)
     const completionContext = mergeCompletionContext(req.context, knowledgeResolution.context)
+    const soulContext = buildSoulContext(settings.soul)
     const cacheKey = buildCompletionCacheKey({
       provider: settings.provider,
       model: settings.model,
       prefix: req.prefix,
       suffix: req.suffix,
       context: completionContext,
+      soulContext,
     })
     const cached = completionCache.get(cacheKey)
     if (cached !== null && !req.debug) {
@@ -367,6 +370,10 @@ export default defineBackground(() => {
           },
           timings,
           knowledgeResolution,
+          soul: {
+            context: soulContext,
+            enabled: settings.soul.enabled,
+          },
           telemetry: telemetryStats === null
             ? undefined
             : {

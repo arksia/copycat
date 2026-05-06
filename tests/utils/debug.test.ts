@@ -96,6 +96,10 @@ describe('buildCompletionDebugInfo', () => {
           },
         ],
       },
+      soul: {
+        context: '[Identity]\n工程师\n\n[Preferences]\n先给结论',
+        enabled: true,
+      },
       telemetry: {
         host: 'chatgpt.com',
         stats: telemetry,
@@ -158,6 +162,10 @@ describe('buildCompletionDebugInfo', () => {
         ],
       },
       knowledgeContext: '[Knowledge]\n虚拟列表适合处理长列表渲染。',
+      soulContext: '[Identity]\n工程师\n\n[Preferences]\n先给结论',
+      soulEnabled: true,
+      soulConfigured: true,
+      soulCharCount: 34,
       knowledgeChunks: [
         {
           id: 'chunk-1',
@@ -199,5 +207,49 @@ describe('buildCompletionDebugInfo', () => {
         chunks: [],
       },
     })).toBeUndefined()
+  })
+
+  it('keeps soul configured state even when the projected context is empty', () => {
+    const baseDebug: CompletionDebugInfo = {
+      rawCompletion: '',
+      sanitizedCompletion: '',
+      rawChoice: '{}',
+      cacheHit: false,
+      requestBody: {
+        systemPrompt: 'system',
+        userPrompt: 'user',
+      },
+    }
+
+    expect(buildCompletionDebugInfo(baseDebug, {
+      appliedStrategy: {
+        requestStage: 'fast',
+        shouldRunEnhancedStage: false,
+        telemetryWindowSize: 20,
+        knowledgeBudget: {
+          topK: 2,
+          maxChars: 900,
+        },
+      },
+      timings: {
+        totalMs: 10,
+        settingsMs: 1,
+        telemetryMs: 0,
+        knowledgeMs: 0,
+        llmMs: 9,
+      },
+      knowledgeResolution: {
+        chunks: [],
+      },
+      soul: {
+        context: '',
+        enabled: true,
+      },
+    })).toMatchObject({
+      soulContext: '',
+      soulEnabled: false,
+      soulConfigured: true,
+      soulCharCount: 0,
+    })
   })
 })

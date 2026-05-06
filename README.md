@@ -41,6 +41,7 @@ Current progress is best described as **Phase 3 in progress**:
 - ✅ Options UI, popup toggle, playground, model discovery, debug preview
 - ✅ IndexedDB local completion cache, telemetry store, and knowledge document storage
 - ✅ Markdown knowledge import, chunking, local embeddings, semantic-first retrieval, and prompt packing
+- ✅ Single-profile Soul layer with prompt injection, settings editing, and playground debug visibility
 - ✅ Extensible editor adapter layer, with current delivery priority on native text inputs
 - ✅ Staged completion flow plus local telemetry-driven retrieval budget tuning
 - ✅ Document-level semantic recall on top of chunk-level semantic rerank

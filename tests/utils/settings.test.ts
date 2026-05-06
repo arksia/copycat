@@ -2,10 +2,12 @@ import type { Settings } from '~/types'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   DEFAULT_SETTINGS,
+  buildDefaultSettings,
   buildDevSettingsOverride,
   hostMatches,
   isHostEnabled,
   normalizeSettingsShape,
+  saveSettings,
 } from '~/utils/settings'
 
 const baseSettings: Settings = {
@@ -19,12 +21,24 @@ const baseSettings: Settings = {
   debounceMs: 300,
   minPrefixChars: 3,
   systemPrompt: 'test',
+  soul: {
+    enabled: false,
+    profile: {
+      identity: '',
+      style: '',
+      preferences: '',
+      avoidances: '',
+      terms: '',
+      notes: '',
+    },
+  },
   enabledHosts: ['chatgpt.com'],
   disabledHosts: [],
 }
 
 afterEach(() => {
   vi.unstubAllEnvs()
+  vi.unstubAllGlobals()
 })
 
 describe('hostMatches', () => {
@@ -77,6 +91,36 @@ describe('normalizeSettingsShape', () => {
       temperature: DEFAULT_SETTINGS.temperature,
     })
   })
+
+  it('normalizes missing and invalid soul fields', () => {
+    const invalidSettings = {
+      soul: {
+        enabled: 'yes',
+        profile: {
+          identity: '  builder  ',
+          style: null,
+          preferences: '  concise  ',
+          avoidances: 123,
+          terms: '  copycat, soul  ',
+          notes: undefined,
+        },
+      },
+    } as unknown as Partial<Settings>
+
+    expect(normalizeSettingsShape(invalidSettings)).toMatchObject({
+      soul: {
+        enabled: false,
+        profile: {
+          identity: 'builder',
+          style: '',
+          preferences: 'concise',
+          avoidances: '',
+          terms: 'copycat, soul',
+          notes: '',
+        },
+      },
+    })
+  })
 })
 
 describe('buildDevSettingsOverride', () => {
@@ -100,5 +144,47 @@ describe('buildDevSettingsOverride', () => {
       model: 'MiniMax-Text-01',
       apiKey: 'test-key',
     })
+  })
+})
+
+describe('saveSettings', () => {
+  it('deep-merges nested soul patches without clearing the existing profile', async () => {
+    const current = buildDefaultSettings()
+    current.soul.enabled = false
+    current.soul.profile.identity = 'builder'
+    current.soul.profile.preferences = 'concise'
+
+    const get = vi.fn().mockResolvedValue({
+      'copycat:settings:v1': current,
+    })
+    const set = vi.fn().mockResolvedValue(undefined)
+
+    vi.stubGlobal('chrome', {
+      storage: {
+        local: {
+          get,
+          set,
+        },
+      },
+    })
+
+    const saved = await saveSettings({
+      soul: {
+        enabled: true,
+      },
+    })
+
+    expect(saved.soul).toEqual({
+      enabled: true,
+      profile: {
+        identity: 'builder',
+        style: '',
+        preferences: 'concise',
+        avoidances: '',
+        terms: '',
+        notes: '',
+      },
+    })
+    expect(set).toHaveBeenCalledTimes(1)
   })
 })
