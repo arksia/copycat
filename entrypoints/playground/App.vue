@@ -39,6 +39,7 @@ const debugUserPrompt = ref('')
 const debugSystemPrompt = ref('')
 const debugSoulContext = ref('')
 const debugKnowledgeContext = ref('')
+const debugKnowledgeBudget = ref('')
 const debugKnowledgeQuery = ref('')
 const debugKnowledgeRecall = ref('')
 const debugKnowledgeRerank = ref('')
@@ -58,6 +59,7 @@ const debugTelemetry = ref('')
 const debugSoulEnabled = ref(false)
 const debugSoulConfigured = ref(false)
 const debugSoulCharCount = ref(0)
+const debugSoulBudget = ref('')
 const lastRequestId = ref('')
 const lastLatencyMs = ref<number | null>(null)
 const settings = ref<Settings | null>(null)
@@ -117,6 +119,59 @@ const knowledgeTimingSummary = computed(() => {
     ['Search', `${knowledge.searchMs} ms`],
     ['Context', `${knowledge.contextMs} ms`],
     ['Load chunks', `${knowledge.loadChunksMs} ms`],
+  ]
+})
+const parsedKnowledgeBudget = computed(() => {
+  if (!debugKnowledgeBudget.value) {
+    return null
+  }
+
+  try {
+    return JSON.parse(debugKnowledgeBudget.value) as CompletionDebugInfo['knowledgeBudgetMeta']
+  }
+  catch {
+    return null
+  }
+})
+const knowledgeBudgetSummary = computed(() => {
+  const budget = parsedKnowledgeBudget.value
+  if (budget === null || budget === undefined) {
+    return []
+  }
+
+  return [
+    ['Packed', `${budget.usedChars} / ${budget.totalChars} chars`],
+    ['Truncated', budget.truncated ? 'yes' : 'no'],
+    ['Included chunks', budget.includedChunkIds.join(', ') || 'none'],
+    ['Dropped chunks', budget.droppedChunkIds.join(', ') || 'none'],
+    ['Trimmed chunks', budget.trimmedChunkIds.join(', ') || 'none'],
+  ]
+})
+const parsedSoulBudget = computed(() => {
+  if (!debugSoulBudget.value) {
+    return null
+  }
+
+  try {
+    return JSON.parse(debugSoulBudget.value) as CompletionDebugInfo['soulBudget']
+  }
+  catch {
+    return null
+  }
+})
+const soulBudgetSummary = computed(() => {
+  const budget = parsedSoulBudget.value
+  if (budget === null || budget === undefined) {
+    return []
+  }
+
+  return [
+    ['Budget', `${budget.usedChars} / ${budget.totalChars} chars`],
+    ['Reserved', `${budget.reservedChars} chars`],
+    ['Truncated', budget.truncated ? 'yes' : 'no'],
+    ['Included', budget.includedBlocks.join(', ') || 'none'],
+    ['Dropped', budget.droppedBlocks.join(', ') || 'none'],
+    ['Trimmed', budget.trimmedBlocks.map(item => item.label).join(', ') || 'none'],
   ]
 })
 
@@ -457,7 +512,13 @@ function assignDebugState(debug: CompletionResponse['debug']) {
   debugSoulEnabled.value = debug?.soulEnabled ?? false
   debugSoulConfigured.value = debug?.soulConfigured ?? false
   debugSoulCharCount.value = debug?.soulCharCount ?? 0
+  debugSoulBudget.value = debug?.soulBudget
+    ? JSON.stringify(debug.soulBudget, null, 2)
+    : ''
   debugKnowledgeContext.value = debug?.knowledgeContext ?? ''
+  debugKnowledgeBudget.value = debug?.knowledgeBudgetMeta
+    ? JSON.stringify(debug.knowledgeBudgetMeta, null, 2)
+    : ''
   debugKnowledgeQuery.value = debug?.knowledgeQuery ?? ''
   debugKnowledgeRecall.value = debug?.knowledgeRecall
     ? JSON.stringify(debug.knowledgeRecall, null, 2)
@@ -480,7 +541,9 @@ function clearDebugState() {
   debugSoulEnabled.value = false
   debugSoulConfigured.value = false
   debugSoulCharCount.value = 0
+  debugSoulBudget.value = ''
   debugKnowledgeContext.value = ''
+  debugKnowledgeBudget.value = ''
   debugKnowledgeQuery.value = ''
   debugKnowledgeRecall.value = ''
   debugKnowledgeRerank.value = ''
@@ -669,6 +732,12 @@ function openOptions() {
                   }}
                 </dd>
               </div>
+              <div v-for="[label, value] in soulBudgetSummary" :key="label">
+                <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  {{ label }}
+                </dt>
+                <dd class="mt-1 text-neutral-800">{{ value }}</dd>
+              </div>
             </dl>
           </div>
 
@@ -698,6 +767,21 @@ function openOptions() {
               </div>
               <div v-if="knowledgeTimingSummary.length === 0" class="text-sm text-neutral-400">
                 No knowledge timing data yet.
+              </div>
+            </dl>
+          </div>
+
+          <div class="card">
+            <h2 class="mb-4 text-base font-semibold">Knowledge budget</h2>
+            <dl class="space-y-3 text-sm">
+              <div v-for="[label, value] in knowledgeBudgetSummary" :key="label">
+                <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  {{ label }}
+                </dt>
+                <dd class="mt-1 text-neutral-800">{{ value }}</dd>
+              </div>
+              <div v-if="knowledgeBudgetSummary.length === 0" class="text-sm text-neutral-400">
+                No knowledge budget data yet.
               </div>
             </dl>
           </div>
@@ -790,9 +874,21 @@ function openOptions() {
               </div>
               <div>
                 <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  Soul budget
+                </div>
+                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulBudget || '(empty)' }}</pre>
+              </div>
+              <div>
+                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
                   Knowledge query
                 </div>
                 <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeQuery || '(empty)' }}</pre>
+              </div>
+              <div>
+                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  Knowledge budget
+                </div>
+                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeBudget || '(empty)' }}</pre>
               </div>
               <div>
                 <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">

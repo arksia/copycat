@@ -14,6 +14,19 @@ export interface SoulSettings {
   profile: SoulProfile
 }
 
+export interface SoulBudgetMeta {
+  totalChars: number
+  reservedChars: number
+  usedChars: number
+  truncated: boolean
+  includedBlocks: string[]
+  droppedBlocks: string[]
+  trimmedBlocks: Array<{
+    label: string
+    wasDropped: boolean
+  }>
+}
+
 export interface SettingsPatch extends Partial<Omit<Settings, 'soul'>> {
   soul?: Partial<{
     enabled: boolean
@@ -98,10 +111,12 @@ export interface CompletionDebugInfo {
     }
   }
   knowledgeContext?: string
+  knowledgeBudgetMeta?: KnowledgeBudgetMeta
   soulContext?: string
   soulEnabled?: boolean
   soulConfigured?: boolean
   soulCharCount?: number
+  soulBudget?: SoulBudgetMeta
   knowledgeQuery?: string
   knowledgeRecall?: {
     strategy: 'semantic_index'
@@ -240,6 +255,15 @@ export interface KnowledgeChunk {
     sourceName: string
     tokenCount: number
   }
+}
+
+export interface KnowledgeBudgetMeta {
+  totalChars: number
+  usedChars: number
+  truncated: boolean
+  includedChunkIds: string[]
+  droppedChunkIds: string[]
+  trimmedChunkIds: string[]
 }
 
 export interface KnowledgeImportRequest {

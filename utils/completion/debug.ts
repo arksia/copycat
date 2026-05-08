@@ -30,6 +30,7 @@ export interface BuildCompletionDebugInfoArgs {
   knowledgeResolution: {
     chunks: KnowledgeChunk[]
     context?: string
+    budgetMeta?: CompletionDebugInfo['knowledgeBudgetMeta']
     query?: string
     recall?: CompletionDebugInfo['knowledgeRecall']
     rerank?: CompletionDebugInfo['knowledgeRerank']
@@ -38,6 +39,7 @@ export interface BuildCompletionDebugInfoArgs {
   soul?: {
     context: string
     enabled: boolean
+    budget?: CompletionDebugInfo['soulBudget']
   }
   telemetry?: {
     host: string
@@ -82,7 +84,9 @@ export function buildCompletionDebugInfo(
     soulEnabled: (args.soul?.context ?? debug.soulContext ?? '').length > 0,
     soulConfigured: args.soul?.enabled ?? debug.soulConfigured,
     soulCharCount: (args.soul?.context ?? debug.soulContext ?? '').length,
+    soulBudget: args.soul?.budget ?? debug.soulBudget,
     knowledgeContext: args.knowledgeResolution.context,
+    knowledgeBudgetMeta: args.knowledgeResolution.budgetMeta,
     knowledgeQuery: args.knowledgeResolution.query,
     knowledgeRecall: args.knowledgeResolution.recall,
     knowledgeRerank: args.knowledgeResolution.rerank,

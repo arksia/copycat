@@ -3,7 +3,7 @@ import {
   buildOpenAICompatibleHeaders,
   joinOpenAICompatibleUrl,
 } from '../openai-compatible'
-import { buildCompletionUserPrompt, buildSoulContext } from './prompt'
+import { buildCompletionUserPrompt, buildSoulProjection } from './prompt'
 
 /**
  * Arguments for a single inline completion request.
@@ -106,7 +106,8 @@ export async function completeOnceDetailed({
   signal,
 }: CompleteArgs): Promise<CompleteResult> {
   const url = joinOpenAICompatibleUrl(settings.baseUrl, '/chat/completions')
-  const soulContext = buildSoulContext(settings.soul)
+  const soulProjection = buildSoulProjection(settings.soul)
+  const soulContext = soulProjection.context
   const userPrompt = buildCompletionUserPrompt({
     prefix,
     suffix,
@@ -149,6 +150,7 @@ export async function completeOnceDetailed({
       soulEnabled: soulContext.length > 0,
       soulConfigured: settings.soul.enabled,
       soulCharCount: soulContext.length,
+      soulBudget: soulProjection.meta,
       requestBody: {
         systemPrompt: settings.systemPrompt,
         userPrompt,

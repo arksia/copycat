@@ -43,6 +43,14 @@ describe('buildCompletionDebugInfo', () => {
       knowledgeResolution: {
         query: '虚拟列表',
         context: '[Knowledge]\n虚拟列表适合处理长列表渲染。',
+        budgetMeta: {
+          totalChars: 1200,
+          usedChars: 32,
+          truncated: true,
+          includedChunkIds: ['chunk-1'],
+          droppedChunkIds: ['chunk-2'],
+          trimmedChunkIds: [],
+        },
         recall: {
           strategy: 'semantic_index',
           queryTerms: ['虚拟列表', '滚动', '性能'],
@@ -99,6 +107,15 @@ describe('buildCompletionDebugInfo', () => {
       soul: {
         context: '[Identity]\n工程师\n\n[Preferences]\n先给结论',
         enabled: true,
+        budget: {
+          totalChars: 1200,
+          reservedChars: 240,
+          usedChars: 34,
+          truncated: false,
+          includedBlocks: ['Role Context', 'Writing Preferences', 'Application Rules'],
+          droppedBlocks: [],
+          trimmedBlocks: [],
+        },
       },
       telemetry: {
         host: 'chatgpt.com',
@@ -162,10 +179,27 @@ describe('buildCompletionDebugInfo', () => {
         ],
       },
       knowledgeContext: '[Knowledge]\n虚拟列表适合处理长列表渲染。',
+      knowledgeBudgetMeta: {
+        totalChars: 1200,
+        usedChars: 32,
+        truncated: true,
+        includedChunkIds: ['chunk-1'],
+        droppedChunkIds: ['chunk-2'],
+        trimmedChunkIds: [],
+      },
       soulContext: '[Identity]\n工程师\n\n[Preferences]\n先给结论',
       soulEnabled: true,
       soulConfigured: true,
       soulCharCount: 34,
+      soulBudget: {
+        totalChars: 1200,
+        reservedChars: 240,
+        usedChars: 34,
+        truncated: false,
+        includedBlocks: ['Role Context', 'Writing Preferences', 'Application Rules'],
+        droppedBlocks: [],
+        trimmedBlocks: [],
+      },
       knowledgeChunks: [
         {
           id: 'chunk-1',
@@ -244,12 +278,30 @@ describe('buildCompletionDebugInfo', () => {
       soul: {
         context: '',
         enabled: true,
+        budget: {
+          totalChars: 1200,
+          reservedChars: 240,
+          usedChars: 0,
+          truncated: false,
+          includedBlocks: [],
+          droppedBlocks: [],
+          trimmedBlocks: [],
+        },
       },
     })).toMatchObject({
       soulContext: '',
       soulEnabled: false,
       soulConfigured: true,
       soulCharCount: 0,
+      soulBudget: {
+        totalChars: 1200,
+        reservedChars: 240,
+        usedChars: 0,
+        truncated: false,
+        includedBlocks: [],
+        droppedBlocks: [],
+        trimmedBlocks: [],
+      },
     })
   })
 })

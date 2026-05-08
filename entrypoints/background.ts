@@ -32,11 +32,11 @@ import {
   searchKnowledgeChunks,
 } from '~/utils/db/repositories/knowledge'
 import { buildCompletionDebugInfo } from '~/utils/completion/debug'
-import { buildSoulContext } from '~/utils/completion/prompt'
+import { buildSoulProjection } from '~/utils/completion/prompt'
 import { resolveKnowledgeRetrievalBudget } from '~/utils/knowledge-budget'
 import { resolveSemanticSimilarity } from '~/utils/knowledge/retriever'
 import {
-  buildKnowledgeContext,
+  buildKnowledgeContextProjection,
   buildKnowledgeSearchQuery,
 } from '~/utils/knowledge/prompt'
 import {
@@ -256,7 +256,8 @@ export default defineBackground(() => {
     )
     const knowledgeMs = Math.round(performance.now() - knowledgeStart)
     const completionContext = mergeCompletionContext(req.context, knowledgeResolution.context)
-    const soulContext = buildSoulContext(settings.soul)
+    const soulProjection = buildSoulProjection(settings.soul)
+    const soulContext = soulProjection.context
     const cacheKey = buildCompletionCacheKey({
       provider: settings.provider,
       model: settings.model,
@@ -373,6 +374,7 @@ export default defineBackground(() => {
           soul: {
             context: soulContext,
             enabled: settings.soul.enabled,
+            budget: soulProjection.meta,
           },
           telemetry: telemetryStats === null
             ? undefined
@@ -579,6 +581,7 @@ export default defineBackground(() => {
   ): Promise<{
     chunks: KnowledgeChunk[]
     context?: string
+    budgetMeta?: CompletionDebugInfo['knowledgeBudgetMeta']
     query?: string
     recall?: CompletionDebugInfo['knowledgeRecall']
     rerank?: CompletionDebugInfo['knowledgeRerank']
@@ -661,7 +664,7 @@ export default defineBackground(() => {
       const searchMs = Math.round(performance.now() - searchStart)
       const chunks = result.chunks
       const contextStart = performance.now()
-      const packedKnowledge = buildKnowledgeContext({
+      const packedKnowledge = buildKnowledgeContextProjection({
         chunks,
         maxChars: budget.maxChars,
         maxChunks: budget.topK,
@@ -678,10 +681,11 @@ export default defineBackground(() => {
         semanticState: semanticResolution?.state ?? 'skipped',
       }
 
-      if (packedKnowledge.length > 0) {
+      if (packedKnowledge.context.length > 0) {
         return {
           chunks,
-          context: packedKnowledge,
+          context: packedKnowledge.context,
+          budgetMeta: packedKnowledge.meta,
           query,
           recall: result.recall,
           rerank: result.rerank,
@@ -691,6 +695,7 @@ export default defineBackground(() => {
 
       return {
         chunks,
+        budgetMeta: packedKnowledge.meta,
         query,
         recall: result.recall,
         rerank: result.rerank,
