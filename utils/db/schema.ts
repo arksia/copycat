@@ -1,4 +1,9 @@
-import type { CompletionEvent, KnowledgeChunk, KnowledgeDocument } from '~/types'
+import type {
+  CompletionEvent,
+  KnowledgeChunk,
+  KnowledgeDocument,
+  SoulObservedSignal,
+} from '~/types'
 
 /**
  * Stable IndexedDB database name for Copycat local data.
@@ -22,7 +27,7 @@ export const DB_NAME = 'copycat'
  * Returns:
  * - the active database version integer
  */
-export const DB_VERSION = 3
+export const DB_VERSION = 4
 
 /**
  * Shared object-store names used by the local data layer.
@@ -39,6 +44,7 @@ export const DB_STORES = {
   completionEvents: 'completion-events',
   knowledgeChunks: 'knowledge-chunks',
   knowledgeDocuments: 'knowledge-documents',
+  soulObservedSignals: 'soul-observed-signals',
 } as const
 
 /**
@@ -59,6 +65,8 @@ export const DB_INDEXES = {
   knowledgeChunksByKeyword: 'by-keyword',
   knowledgeChunksByKnowledgeBase: 'by-knowledge-base',
   knowledgeDocumentsByKnowledgeBase: 'by-knowledge-base',
+  soulObservedSignalsByLastSeenAt: 'by-last-seen-at',
+  soulObservedSignalsByKindValue: 'by-kind-value',
 } as const
 
 /**
@@ -97,4 +105,5 @@ export interface CopycatDatabaseSchema {
   completionEvents: CompletionEvent
   knowledgeChunks: KnowledgeChunk
   knowledgeDocuments: KnowledgeDocument
+  soulObservedSignals: SoulObservedSignal
 }

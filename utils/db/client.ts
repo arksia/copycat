@@ -61,6 +61,16 @@ export async function openCopycatDb(): Promise<IDBDatabase> {
           multiEntry: true,
         })
       }
+
+      if (!db.objectStoreNames.contains(DB_STORES.soulObservedSignals)) {
+        const soulObservedSignals = db.createObjectStore(DB_STORES.soulObservedSignals, {
+          keyPath: 'id',
+        })
+        soulObservedSignals.createIndex(DB_INDEXES.soulObservedSignalsByLastSeenAt, 'lastSeenAt')
+        soulObservedSignals.createIndex(DB_INDEXES.soulObservedSignalsByKindValue, ['kind', 'value'], {
+          unique: true,
+        })
+      }
     }
 
     request.onsuccess = () => {

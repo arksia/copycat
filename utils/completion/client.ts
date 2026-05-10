@@ -3,7 +3,8 @@ import {
   buildOpenAICompatibleHeaders,
   joinOpenAICompatibleUrl,
 } from '../openai-compatible'
-import { buildCompletionUserPrompt, buildSoulProjection } from './prompt'
+import { buildSoulProjection } from '~/soul'
+import { buildCompletionUserPrompt } from './prompt'
 
 /**
  * Arguments for a single inline completion request.

@@ -41,6 +41,7 @@ export interface BuildCompletionDebugInfoArgs {
     enabled: boolean
     budget?: CompletionDebugInfo['soulBudget']
   }
+  soulSignals?: CompletionDebugInfo['soulSignals']
   telemetry?: {
     host: string
     stats: CompletionEventStats
@@ -85,8 +86,32 @@ export function buildCompletionDebugInfo(
     soulConfigured: args.soul?.enabled ?? debug.soulConfigured,
     soulCharCount: (args.soul?.context ?? debug.soulContext ?? '').length,
     soulBudget: args.soul?.budget ?? debug.soulBudget,
+    soulSignals: args.soulSignals ?? debug.soulSignals,
     knowledgeContext: args.knowledgeResolution.context,
     knowledgeBudgetMeta: args.knowledgeResolution.budgetMeta,
+    promptLayers: {
+      ...debug.promptLayers,
+      ...(args.knowledgeResolution.context === undefined && args.knowledgeResolution.budgetMeta === undefined
+        ? {}
+        : {
+            knowledge: {
+              context: args.knowledgeResolution.context ?? '',
+              enabled: (args.knowledgeResolution.context ?? '').length > 0,
+              usedChars: (args.knowledgeResolution.context ?? '').length,
+              budget: args.knowledgeResolution.budgetMeta,
+            },
+          }),
+      ...(args.soul === undefined
+        ? {}
+        : {
+            soul: {
+              context: args.soul.context,
+              enabled: args.soul.context.length > 0,
+              usedChars: args.soul.context.length,
+              budget: args.soul.budget,
+            },
+          }),
+    },
     knowledgeQuery: args.knowledgeResolution.query,
     knowledgeRecall: args.knowledgeResolution.recall,
     knowledgeRerank: args.knowledgeResolution.rerank,

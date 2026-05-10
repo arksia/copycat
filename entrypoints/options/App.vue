@@ -30,7 +30,7 @@ import {
   saveSettings,
 } from '~/utils/settings'
 import { loadTelemetrySnapshot } from '~/utils/completion/telemetry'
-import { buildSoulContext } from '~/utils/completion/prompt'
+import { buildSoulContext } from '~/soul'
 
 const DEFAULT_KB_ID = 'default'
 

@@ -1,4 +1,4 @@
-import type { CompletionEvent } from '~/types'
+import type { CompletionEvent, SoulObservedSignal } from '~/types'
 import { afterEach, describe, expect, it } from 'vitest'
 import { deleteCopycatDb } from '~/utils/db/client'
 import {
@@ -17,6 +17,12 @@ import {
   putKnowledgeDocument,
   searchKnowledgeChunks,
 } from '~/utils/db/repositories/knowledge'
+import {
+  getSoulObservedSignalSnapshot,
+  listSoulObservedSignals,
+  putSoulObservedSignal,
+  upsertSoulObservedSignal,
+} from '~/soul'
 
 afterEach(async () => {
   await deleteCopycatDb()
@@ -173,6 +179,110 @@ describe('indexeddb repositories', () => {
     expect(await getPersistedCompletion('cache-key', 150)).toBeNull()
   })
 
+  it('stores and lists observed Soul signals by recency', async () => {
+    await putSoulObservedSignal({
+      id: 'signal-1',
+      kind: 'preference',
+      value: 'prefer-direct-tone',
+      confidence: 0.67,
+      count: 3,
+      acceptedCount: 2,
+      rejectedCount: 1,
+      ignoredCount: 0,
+      distinctContextCount: 2,
+      firstSeenAt: 100,
+      lastSeenAt: 200,
+      evidence: buildSoulSignalEvidence('accepted', 200),
+      contextKeys: ['chatgpt.com::direct'],
+      documentIds: [],
+    })
+    await putSoulObservedSignal({
+      id: 'signal-2',
+      kind: 'avoidance',
+      value: 'avoid-marketing-language',
+      confidence: 0.5,
+      count: 2,
+      acceptedCount: 0,
+      rejectedCount: 1,
+      ignoredCount: 1,
+      distinctContextCount: 1,
+      firstSeenAt: 50,
+      lastSeenAt: 300,
+      evidence: buildSoulSignalEvidence('rejected', 300),
+      contextKeys: ['chatgpt.com::marketing'],
+      documentIds: [],
+    })
+
+    const signals = await listSoulObservedSignals({ limit: 5 })
+
+    expect(signals.map(signal => signal.id)).toEqual(['signal-2', 'signal-1'])
+  })
+
+  it('aggregates observed Soul signals across repeated matching events', async () => {
+    await upsertSoulObservedSignal({
+      kind: 'preference',
+      value: 'prefer-direct-tone',
+      evidence: buildSoulSignalEvidence('accepted', 100),
+      contextKey: 'chatgpt.com::a',
+      documentIds: [],
+    })
+    await upsertSoulObservedSignal({
+      kind: 'preference',
+      value: 'prefer-direct-tone',
+      evidence: buildSoulSignalEvidence('accepted', 200),
+      contextKey: 'chatgpt.com::b',
+      documentIds: [],
+    })
+    await upsertSoulObservedSignal({
+      kind: 'preference',
+      value: 'prefer-direct-tone',
+      evidence: buildSoulSignalEvidence('rejected', 300),
+      contextKey: 'chatgpt.com::b',
+      documentIds: [],
+    })
+
+    const snapshot = await getSoulObservedSignalSnapshot()
+
+    expect(snapshot.totalCount).toBe(1)
+    expect(snapshot.signals[0]).toEqual(expect.objectContaining({
+      value: 'prefer-direct-tone',
+      count: 3,
+      acceptedCount: 2,
+      rejectedCount: 1,
+      distinctContextCount: 2,
+      confidence: 0.43,
+    }))
+  })
+
+  it('filters mature observed Soul signals using the v1 thresholds', async () => {
+    await putSoulObservedSignal(buildStoredSoulSignal({
+      id: 'signal-1',
+      value: 'prefer-direct-tone',
+      count: 3,
+      acceptedCount: 2,
+      rejectedCount: 0,
+      ignoredCount: 1,
+      distinctContextCount: 2,
+      lastSeenAt: 200,
+    }))
+    await putSoulObservedSignal(buildStoredSoulSignal({
+      id: 'signal-2',
+      value: 'avoid-marketing-language',
+      count: 2,
+      acceptedCount: 0,
+      rejectedCount: 1,
+      ignoredCount: 1,
+      distinctContextCount: 1,
+      lastSeenAt: 300,
+    }))
+
+    const snapshot = await getSoulObservedSignalSnapshot({ matureOnly: true })
+
+    expect(snapshot.totalCount).toBe(2)
+    expect(snapshot.matureCount).toBe(1)
+    expect(snapshot.signals.map(signal => signal.id)).toEqual(['signal-1'])
+  })
+
   it('stores knowledge documents and searches chunks inside one knowledge base', async () => {
     await putKnowledgeDocument({
       id: 'doc-1',
@@ -279,3 +389,42 @@ describe('indexeddb repositories', () => {
     ])
   })
 })
+
+function buildSoulSignalEvidence(
+  action: CompletionEvent['action'],
+  timestamp: number,
+): SoulObservedSignal['evidence'] {
+  return {
+    action,
+    host: 'chatgpt.com',
+    prefixPreview: '写一个结论先行的说明',
+    suggestionPreview: '先给结论，再补背景。',
+    suggestionLengthBucket: 'short',
+    openingStructure: 'answer-first',
+    toneHints: ['direct'],
+    termHits: [],
+    timestamp,
+  }
+}
+
+function buildStoredSoulSignal(
+  overrides: Partial<SoulObservedSignal> & Pick<SoulObservedSignal, 'id' | 'value'>,
+): SoulObservedSignal {
+  return {
+    id: overrides.id,
+    kind: overrides.kind ?? 'preference',
+    value: overrides.value,
+    confidence: overrides.confidence ?? 0.67,
+    count: overrides.count ?? 3,
+    acceptedCount: overrides.acceptedCount ?? 2,
+    rejectedCount: overrides.rejectedCount ?? 0,
+    ignoredCount: overrides.ignoredCount ?? 1,
+    distinctContextCount: overrides.distinctContextCount ?? 2,
+    firstSeenAt: overrides.firstSeenAt ?? 100,
+    lastSeenAt: overrides.lastSeenAt ?? 300,
+    lastReflectedAt: overrides.lastReflectedAt,
+    evidence: overrides.evidence ?? buildSoulSignalEvidence('accepted', overrides.lastSeenAt ?? 300),
+    contextKeys: overrides.contextKeys ?? ['chatgpt.com::a', 'chatgpt.com::b'],
+    documentIds: overrides.documentIds ?? [],
+  }
+}

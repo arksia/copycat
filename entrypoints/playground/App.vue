@@ -37,6 +37,8 @@ const debugSanitizedCompletion = ref('')
 const debugRawChoice = ref('')
 const debugUserPrompt = ref('')
 const debugSystemPrompt = ref('')
+const debugPromptLayers = ref('')
+const debugSoulSignals = ref('')
 const debugSoulContext = ref('')
 const debugKnowledgeContext = ref('')
 const debugKnowledgeBudget = ref('')
@@ -133,14 +135,38 @@ const parsedKnowledgeBudget = computed(() => {
     return null
   }
 })
+const parsedPromptLayers = computed(() => {
+  if (!debugPromptLayers.value) {
+    return null
+  }
+
+  try {
+    return JSON.parse(debugPromptLayers.value) as CompletionDebugInfo['promptLayers']
+  }
+  catch {
+    return null
+  }
+})
+const parsedSoulSignals = computed(() => {
+  if (!debugSoulSignals.value) {
+    return null
+  }
+
+  try {
+    return JSON.parse(debugSoulSignals.value) as CompletionDebugInfo['soulSignals']
+  }
+  catch {
+    return null
+  }
+})
 const knowledgeBudgetSummary = computed(() => {
-  const budget = parsedKnowledgeBudget.value
+  const budget = parsedPromptLayers.value?.knowledge?.budget ?? parsedKnowledgeBudget.value
   if (budget === null || budget === undefined) {
     return []
   }
 
   return [
-    ['Packed', `${budget.usedChars} / ${budget.totalChars} chars`],
+    ['Packed', `${parsedPromptLayers.value?.knowledge?.usedChars ?? budget.usedChars} / ${budget.totalChars} chars`],
     ['Truncated', budget.truncated ? 'yes' : 'no'],
     ['Included chunks', budget.includedChunkIds.join(', ') || 'none'],
     ['Dropped chunks', budget.droppedChunkIds.join(', ') || 'none'],
@@ -148,27 +174,50 @@ const knowledgeBudgetSummary = computed(() => {
   ]
 })
 const soulHighlights = computed(() => {
-  if (!debugSoulEnabled.value && !debugSoulConfigured.value) {
+  const soulLayer = parsedPromptLayers.value?.soul
+  if (!debugSoulEnabled.value && !debugSoulConfigured.value && soulLayer === undefined) {
     return []
   }
 
   return [
     {
       label: 'Projection',
-      value: debugSoulEnabled.value ? 'active' : 'configured but empty',
+      value: (soulLayer?.enabled ?? debugSoulEnabled.value) ? 'active' : 'configured but empty',
     },
     {
       label: 'Chars',
-      value: String(debugSoulCharCount.value),
+      value: String(soulLayer?.usedChars ?? debugSoulCharCount.value),
     },
     {
       label: 'Included',
-      value: parsedSoulBudget.value?.includedBlocks.join(', ') || 'none',
+      value: (soulLayer?.budget?.includedBlocks ?? parsedSoulBudget.value?.includedBlocks)?.join(', ') || 'none',
+    },
+  ]
+})
+const soulSignalHighlights = computed(() => {
+  const signals = parsedSoulSignals.value
+  if (signals === null || signals === undefined) {
+    return []
+  }
+
+  return [
+    {
+      label: 'Observed',
+      value: String(signals.totalCount),
+    },
+    {
+      label: 'Mature',
+      value: String(signals.matureCount),
+    },
+    {
+      label: 'Top signal',
+      value: signals.signals[0] ? `${signals.signals[0].kind}:${signals.signals[0].value}` : 'none',
     },
   ]
 })
 const knowledgeHighlights = computed(() => {
-  const budget = parsedKnowledgeBudget.value
+  const knowledgeLayer = parsedPromptLayers.value?.knowledge
+  const budget = knowledgeLayer?.budget ?? parsedKnowledgeBudget.value
   if (budget === null || budget === undefined) {
     return []
   }
@@ -176,7 +225,7 @@ const knowledgeHighlights = computed(() => {
   return [
     {
       label: 'Packed',
-      value: `${budget.usedChars} / ${budget.totalChars}`,
+      value: `${knowledgeLayer?.usedChars ?? budget.usedChars} / ${budget.totalChars}`,
     },
     {
       label: 'Included',
@@ -201,7 +250,7 @@ const parsedSoulBudget = computed(() => {
   }
 })
 const soulBudgetSummary = computed(() => {
-  const budget = parsedSoulBudget.value
+  const budget = parsedPromptLayers.value?.soul?.budget ?? parsedSoulBudget.value
   if (budget === null || budget === undefined) {
     return []
   }
@@ -546,6 +595,12 @@ function assignDebugState(debug: CompletionResponse['debug']) {
   debugRawChoice.value = debug?.rawChoice ?? ''
   debugUserPrompt.value = debug?.requestBody.userPrompt ?? ''
   debugSystemPrompt.value = debug?.requestBody.systemPrompt ?? ''
+  debugPromptLayers.value = debug?.promptLayers
+    ? JSON.stringify(debug.promptLayers, null, 2)
+    : ''
+  debugSoulSignals.value = debug?.soulSignals
+    ? JSON.stringify(debug.soulSignals, null, 2)
+    : ''
   debugAppliedStrategy.value = debug?.appliedStrategy
     ? JSON.stringify(debug.appliedStrategy, null, 2)
     : ''
@@ -577,6 +632,8 @@ function assignDebugState(debug: CompletionResponse['debug']) {
 }
 
 function clearDebugState() {
+  debugPromptLayers.value = ''
+  debugSoulSignals.value = ''
   debugAppliedStrategy.value = ''
   debugSoulContext.value = ''
   debugSoulEnabled.value = false
@@ -799,6 +856,21 @@ function openOptions() {
             </div>
 
             <div class="card">
+              <h2 class="mb-4 text-base font-semibold">Soul signals</h2>
+              <dl class="space-y-3 text-sm">
+                <div v-for="item in soulSignalHighlights" :key="item.label">
+                  <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                    {{ item.label }}
+                  </dt>
+                  <dd class="mt-1 text-neutral-800">{{ item.value }}</dd>
+                </div>
+                <div v-if="soulSignalHighlights.length === 0" class="text-sm text-neutral-400">
+                  No observed Soul signals yet.
+                </div>
+              </dl>
+            </div>
+
+            <div class="card">
               <h2 class="mb-4 text-base font-semibold">Knowledge snapshot</h2>
               <dl class="space-y-3 text-sm">
                 <div v-for="item in knowledgeHighlights" :key="item.label">
@@ -938,6 +1010,18 @@ function openOptions() {
                   Applied strategy
                 </div>
                 <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugAppliedStrategy || '(empty)' }}</pre>
+              </div>
+              <div>
+                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  Prompt layers
+                </div>
+                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugPromptLayers || '(empty)' }}</pre>
+              </div>
+              <div>
+                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                  Soul signals
+                </div>
+                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulSignals || '(empty)' }}</pre>
               </div>
               <div>
                 <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">

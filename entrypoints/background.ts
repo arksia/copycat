@@ -1,6 +1,7 @@
 import type {
   CompletionDebugInfo,
   CompletionError,
+  CompletionEvent,
   CompletionEventStats,
   CompletionRequest,
   CompletionResponse,
@@ -24,6 +25,10 @@ import {
   putCompletionEvent,
 } from '~/utils/db/repositories/events'
 import {
+  getSoulObservedSignalSnapshot,
+  upsertSoulObservedSignal,
+} from '~/soul'
+import {
   listKnowledgeChunksByDocumentIds,
   deleteKnowledgeDocument,
   listKnowledgeDocuments,
@@ -32,7 +37,8 @@ import {
   searchKnowledgeChunks,
 } from '~/utils/db/repositories/knowledge'
 import { buildCompletionDebugInfo } from '~/utils/completion/debug'
-import { buildSoulProjection } from '~/utils/completion/prompt'
+import { buildSoulProjection } from '~/soul'
+import { deriveSoulObservedSignals } from '~/soul'
 import { resolveKnowledgeRetrievalBudget } from '~/utils/knowledge-budget'
 import { resolveSemanticSimilarity } from '~/utils/knowledge/retriever'
 import {
@@ -125,6 +131,9 @@ export default defineBackground(() => {
         void putCompletionEvent(message.payload).catch((error: unknown) => {
           console.warn('[copycat] failed to persist completion event', error)
         })
+        void persistSoulObservedSignals(message.payload).catch((error: unknown) => {
+          console.warn('[copycat] failed to persist Soul observed signals', error)
+        })
         sendResponse({ ok: true })
         return false
 
@@ -144,6 +153,22 @@ export default defineBackground(() => {
       case 'completion/events/stats':
         void getCompletionEventStats(message.payload.host)
           .then((result: CompletionEventStats) => sendResponse({ ok: true, data: result }))
+          .catch((error: unknown) => {
+            sendResponse({
+              ok: false,
+              error: {
+                error: error instanceof Error ? error.message : String(error),
+              },
+            })
+          })
+        return true
+
+      case 'soul/signals':
+        void getSoulObservedSignalSnapshot({
+          limit: message.payload.limit,
+          matureOnly: message.payload.matureOnly,
+        })
+          .then(result => sendResponse({ ok: true, data: result }))
           .catch((error: unknown) => {
             sendResponse({
               ok: false,
@@ -235,6 +260,12 @@ export default defineBackground(() => {
       = telemetryHost !== null && telemetryHost.length > 0
         ? await getCompletionEventStats(telemetryHost, telemetryWindowSize)
         : null
+    const soulSignals = req.debug
+      ? await getSoulObservedSignalSnapshot({
+          limit: 8,
+          matureOnly: true,
+        })
+      : undefined
     const telemetryMs = Math.round(performance.now() - telemetryStart)
     const qualitySignal = telemetryStats === null ? undefined : deriveCompletionQualitySignal(telemetryStats)
     const shouldRunEnhancedStage = requestStage === 'fast' && qualitySignal?.shouldBoostKnowledge === true
@@ -376,6 +407,25 @@ export default defineBackground(() => {
             enabled: settings.soul.enabled,
             budget: soulProjection.meta,
           },
+          soulSignals: soulSignals === undefined
+            ? undefined
+            : {
+                triggered: true,
+                totalCount: soulSignals.totalCount,
+                matureCount: soulSignals.matureCount,
+                signals: soulSignals.signals.map(signal => ({
+                  id: signal.id,
+                  kind: signal.kind,
+                  value: signal.value,
+                  confidence: signal.confidence,
+                  count: signal.count,
+                  acceptedCount: signal.acceptedCount,
+                  rejectedCount: signal.rejectedCount,
+                  ignoredCount: signal.ignoredCount,
+                  distinctContextCount: signal.distinctContextCount,
+                  evidence: signal.evidence,
+                })),
+              },
           telemetry: telemetryStats === null
             ? undefined
             : {
@@ -424,6 +474,14 @@ export default defineBackground(() => {
       if (value === id) {
         requestSignalKeys.delete(key)
       }
+    }
+  }
+
+  async function persistSoulObservedSignals(event: CompletionEvent): Promise<void> {
+    const tags = deriveSoulObservedSignals({ event })
+
+    for (const tag of tags) {
+      await upsertSoulObservedSignal(tag)
     }
   }
 

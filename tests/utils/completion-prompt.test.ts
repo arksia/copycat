@@ -1,9 +1,8 @@
 import type { Settings } from '~/types'
 import { describe, expect, it } from 'vitest'
+import { buildSoulContext, buildSoulProjection } from '~/soul'
 import {
   buildCompletionUserPrompt,
-  buildSoulContext,
-  buildSoulProjection,
 } from '~/utils/completion/prompt'
 
 const baseSoulSettings: Settings['soul'] = {
