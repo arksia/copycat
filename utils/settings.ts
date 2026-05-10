@@ -120,6 +120,8 @@ export function buildDevSettingsOverride(): Partial<Settings> | null {
   const baseUrl = import.meta.env.VITE_COPYCAT_BASE_URL
   const model = import.meta.env.VITE_COPYCAT_MODEL
   const apiKey = import.meta.env.VITE_COPYCAT_API_KEY
+  const soulEnabled = parseBooleanEnv(import.meta.env.VITE_COPYCAT_SOUL_ENABLED)
+  const soulProfile = buildDevSoulProfile()
 
   const next: Partial<Settings> = {}
 
@@ -134,6 +136,12 @@ export function buildDevSettingsOverride(): Partial<Settings> | null {
   }
   if (typeof apiKey === 'string' && apiKey.length > 0) {
     next.apiKey = apiKey
+  }
+  if (soulEnabled !== undefined || soulProfile !== null) {
+    next.soul = {
+      enabled: soulEnabled ?? DEFAULT_SOUL_SETTINGS.enabled,
+      profile: soulProfile ?? { ...DEFAULT_SOUL_PROFILE },
+    }
   }
 
   return Object.keys(next).length > 0 ? next : null
@@ -156,7 +164,7 @@ export async function loadSettings(): Promise<Settings> {
   const raw = await chrome.storage.local.get(STORAGE_KEY)
   const stored = (raw[STORAGE_KEY] ?? {}) as Partial<Settings>
   const devOverride = buildDevSettingsOverride()
-  return normalizeSettingsShape(devOverride === null ? stored : { ...devOverride, ...stored })
+  return normalizeSettingsShape(mergeDevOverrideWithStored(stored, devOverride))
 }
 
 /**
@@ -287,6 +295,80 @@ function normalizeSoulProfile(value: unknown): SoulProfile {
 
 function normalizeSoulField(value: unknown): string {
   return typeof value === 'string' ? value.trim() : ''
+}
+
+function isSoulNeutral(value: unknown): boolean {
+  if (value === undefined) {
+    return true
+  }
+
+  const normalized = normalizeSoulSettings(value)
+  return normalized.enabled === false
+    && normalized.profile.identity.length === 0
+    && normalized.profile.style.length === 0
+    && normalized.profile.preferences.length === 0
+    && normalized.profile.avoidances.length === 0
+    && normalized.profile.terms.length === 0
+    && normalized.profile.notes.length === 0
+}
+
+function mergeDevOverrideWithStored(
+  stored: Partial<Settings>,
+  devOverride: Partial<Settings> | null,
+): Partial<Settings> {
+  if (devOverride === null) {
+    return stored
+  }
+
+  const merged: Partial<Settings> = {
+    ...devOverride,
+    ...stored,
+  }
+
+  if (devOverride.soul !== undefined && isSoulNeutral(stored.soul)) {
+    merged.soul = {
+      ...devOverride.soul,
+    }
+  }
+
+  return merged
+}
+
+function buildDevSoulProfile(): SoulProfile | null {
+  const identity = normalizeSoulField(import.meta.env.VITE_COPYCAT_SOUL_IDENTITY)
+  const style = normalizeSoulField(import.meta.env.VITE_COPYCAT_SOUL_STYLE)
+  const preferences = normalizeSoulField(import.meta.env.VITE_COPYCAT_SOUL_PREFERENCES)
+  const avoidances = normalizeSoulField(import.meta.env.VITE_COPYCAT_SOUL_AVOIDANCES)
+  const terms = normalizeSoulField(import.meta.env.VITE_COPYCAT_SOUL_TERMS)
+  const notes = normalizeSoulField(import.meta.env.VITE_COPYCAT_SOUL_NOTES)
+
+  if (!identity && !style && !preferences && !avoidances && !terms && !notes) {
+    return null
+  }
+
+  return {
+    identity,
+    style,
+    preferences,
+    avoidances,
+    terms,
+    notes,
+  }
+}
+
+function parseBooleanEnv(value: unknown): boolean | undefined {
+  if (typeof value !== 'string') {
+    return undefined
+  }
+
+  if (value === 'true') {
+    return true
+  }
+  if (value === 'false') {
+    return false
+  }
+
+  return undefined
 }
 
 function mergeSettingsPatch(current: Settings, patch: SettingsPatch): Partial<Settings> {

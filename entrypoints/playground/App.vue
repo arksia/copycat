@@ -147,6 +147,47 @@ const knowledgeBudgetSummary = computed(() => {
     ['Trimmed chunks', budget.trimmedChunkIds.join(', ') || 'none'],
   ]
 })
+const soulHighlights = computed(() => {
+  if (!debugSoulEnabled.value && !debugSoulConfigured.value) {
+    return []
+  }
+
+  return [
+    {
+      label: 'Projection',
+      value: debugSoulEnabled.value ? 'active' : 'configured but empty',
+    },
+    {
+      label: 'Chars',
+      value: String(debugSoulCharCount.value),
+    },
+    {
+      label: 'Included',
+      value: parsedSoulBudget.value?.includedBlocks.join(', ') || 'none',
+    },
+  ]
+})
+const knowledgeHighlights = computed(() => {
+  const budget = parsedKnowledgeBudget.value
+  if (budget === null || budget === undefined) {
+    return []
+  }
+
+  return [
+    {
+      label: 'Packed',
+      value: `${budget.usedChars} / ${budget.totalChars}`,
+    },
+    {
+      label: 'Included',
+      value: String(budget.includedChunkIds.length),
+    },
+    {
+      label: 'Dropped',
+      value: String(budget.droppedChunkIds.length),
+    },
+  ]
+})
 const parsedSoulBudget = computed(() => {
   if (!debugSoulBudget.value) {
     return null
@@ -739,6 +780,38 @@ function openOptions() {
                 <dd class="mt-1 text-neutral-800">{{ value }}</dd>
               </div>
             </dl>
+          </div>
+
+          <div class="grid gap-4 sm:grid-cols-2">
+            <div class="card">
+              <h2 class="mb-4 text-base font-semibold">Soul snapshot</h2>
+              <dl class="space-y-3 text-sm">
+                <div v-for="item in soulHighlights" :key="item.label">
+                  <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                    {{ item.label }}
+                  </dt>
+                  <dd class="mt-1 text-neutral-800">{{ item.value }}</dd>
+                </div>
+                <div v-if="soulHighlights.length === 0" class="text-sm text-neutral-400">
+                  No soul data yet.
+                </div>
+              </dl>
+            </div>
+
+            <div class="card">
+              <h2 class="mb-4 text-base font-semibold">Knowledge snapshot</h2>
+              <dl class="space-y-3 text-sm">
+                <div v-for="item in knowledgeHighlights" :key="item.label">
+                  <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                    {{ item.label }}
+                  </dt>
+                  <dd class="mt-1 text-neutral-800">{{ item.value }}</dd>
+                </div>
+                <div v-if="knowledgeHighlights.length === 0" class="text-sm text-neutral-400">
+                  No knowledge data yet.
+                </div>
+              </dl>
+            </div>
           </div>
 
           <div class="card">

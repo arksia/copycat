@@ -6,6 +6,7 @@ import {
   buildDevSettingsOverride,
   hostMatches,
   isHostEnabled,
+  loadSettings,
   normalizeSettingsShape,
   saveSettings,
 } from '~/utils/settings'
@@ -143,6 +144,75 @@ describe('buildDevSettingsOverride', () => {
       baseUrl: 'https://api.minimaxi.com/v1',
       model: 'MiniMax-Text-01',
       apiKey: 'test-key',
+    })
+  })
+
+  it('includes dev soul fields when soul env values are present', () => {
+    vi.stubEnv('VITE_COPYCAT_SOUL_ENABLED', 'true')
+    vi.stubEnv('VITE_COPYCAT_SOUL_IDENTITY', 'A pragmatic extension engineer.')
+    vi.stubEnv('VITE_COPYCAT_SOUL_STYLE', 'Direct and concise.')
+    vi.stubEnv('VITE_COPYCAT_SOUL_PREFERENCES', 'Lead with the smallest workable implementation.')
+    vi.stubEnv('VITE_COPYCAT_SOUL_AVOIDANCES', 'Avoid vague language.')
+    vi.stubEnv('VITE_COPYCAT_SOUL_TERMS', 'ghost text\nsemantic recall')
+    vi.stubEnv('VITE_COPYCAT_SOUL_NOTES', 'Prefer implementation detail over abstraction talk.')
+
+    expect(buildDevSettingsOverride()).toMatchObject({
+      soul: {
+        enabled: true,
+        profile: {
+          identity: 'A pragmatic extension engineer.',
+          style: 'Direct and concise.',
+          preferences: 'Lead with the smallest workable implementation.',
+          avoidances: 'Avoid vague language.',
+          terms: 'ghost text\nsemantic recall',
+          notes: 'Prefer implementation detail over abstraction talk.',
+        },
+      },
+    })
+  })
+})
+
+describe('loadSettings', () => {
+  it('applies the dev soul override when stored soul is still neutral', async () => {
+    vi.stubEnv('VITE_COPYCAT_SOUL_ENABLED', 'true')
+    vi.stubEnv('VITE_COPYCAT_SOUL_IDENTITY', 'A pragmatic extension engineer.')
+    vi.stubEnv('VITE_COPYCAT_SOUL_PREFERENCES', 'Lead with the smallest workable implementation.')
+
+    vi.stubGlobal('chrome', {
+      storage: {
+        local: {
+          get: vi.fn().mockResolvedValue({
+            'copycat:settings:v1': {
+              enabled: true,
+              soul: {
+                enabled: false,
+                profile: {
+                  identity: '',
+                  style: '',
+                  preferences: '',
+                  avoidances: '',
+                  terms: '',
+                  notes: '',
+                },
+              },
+            },
+          }),
+        },
+      },
+    })
+
+    const settings = await loadSettings()
+
+    expect(settings.soul).toEqual({
+      enabled: true,
+      profile: {
+        identity: 'A pragmatic extension engineer.',
+        style: '',
+        preferences: 'Lead with the smallest workable implementation.',
+        avoidances: '',
+        terms: '',
+        notes: '',
+      },
     })
   })
 })
