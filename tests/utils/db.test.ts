@@ -16,7 +16,7 @@ import {
   putKnowledgeChunks,
   putKnowledgeDocument,
   searchKnowledgeChunks,
-} from '~/utils/db/repositories/knowledge'
+} from '~/rag'
 import {
   getSoulObservedSignalSnapshot,
   listSoulObservedSignals,

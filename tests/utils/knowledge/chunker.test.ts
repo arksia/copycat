@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   chunkKnowledgeDocument,
   extractKnowledgeKeywords,
-} from '~/utils/knowledge/chunker'
+} from '~/rag'
 
 describe('extractKnowledgeKeywords', () => {
   it('extracts both latin tokens and han terms for retrieval', () => {

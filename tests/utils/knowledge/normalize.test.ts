@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseKnowledgeDocumentContent } from '~/utils/knowledge/normalize'
+import { parseKnowledgeDocumentContent } from '~/rag'
 
 describe('parseKnowledgeDocumentContent', () => {
   it('strips lightweight markdown syntax into plain text', () => {

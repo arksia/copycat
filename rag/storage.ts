@@ -1,8 +1,8 @@
 import type { CompletionDebugInfo, KnowledgeChunk, KnowledgeDocument } from '~/types'
-import { extractKnowledgeKeywords } from '~/utils/knowledge/chunker'
-import { retrieveKnowledge } from '~/utils/knowledge/retriever'
-import { openCopycatDb, requestToPromise, transactionToPromise } from '../client'
-import { DB_INDEXES, DB_STORES } from '../schema'
+import { openCopycatDb, requestToPromise, transactionToPromise } from '~/utils/db/client'
+import { DB_INDEXES, DB_STORES } from '~/utils/db/schema'
+import { extractKnowledgeKeywords } from './chunker'
+import { retrieveKnowledge } from './retriever'
 
 interface SearchKnowledgeChunksResult {
   chunks: KnowledgeChunk[]

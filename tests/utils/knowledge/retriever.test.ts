@@ -1,6 +1,6 @@
 import type { KnowledgeChunk } from '~/types'
 import { describe, expect, it } from 'vitest'
-import { retrieveKnowledge } from '~/utils/knowledge/retriever'
+import { retrieveKnowledge } from '~/rag'
 
 describe('retrieveKnowledge', () => {
   it('returns no ranked chunks when semantic embeddings are unavailable', () => {

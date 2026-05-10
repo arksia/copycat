@@ -108,13 +108,13 @@ copycat/
 │   ├── completion/         # Completion cache, client, staging, telemetry, debug
 │   ├── core/               # Shared base/runtime helpers
 │   ├── db/                 # IndexedDB schema and repositories
-│   ├── knowledge/          # Import, normalize, chunk, retrieve, prompt packing
 │   ├── editor-adapter.ts   # textarea / input / contenteditable adapters
 │   ├── ghost-text.ts       # Overlay renderer + playground sync
-│   ├── knowledge-budget.ts # Retrieval budget tuning from telemetry quality
 │   ├── openai-compatible.ts# OpenAI-compatible host helpers
 │   ├── providers.ts        # Groq / OpenAI / DeepSeek / Ollama presets
 │   └── settings.ts         # chrome.storage.local schema & helpers
+├── rag/                    # Local knowledge import, embedding, retrieval, prompt packing
+├── soul/                   # Soul profile, projection, and observed signal storage
 ├── types/index.ts          # Shared types
 ├── assets/tailwind.css     # Styles
 ├── wxt.config.ts           # Manifest + build config

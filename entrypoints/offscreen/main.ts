@@ -1,9 +1,9 @@
-import { chunkKnowledgeDocument } from '~/utils/knowledge/chunker'
+import { chunkKnowledgeDocument } from '~/rag'
 import {
   buildKnowledgeChunkEmbedding,
   embedKnowledgeTexts,
-} from '~/utils/knowledge/embedding'
-import { parseKnowledgeDocumentContent } from '~/utils/knowledge/normalize'
+} from '~/rag'
+import { parseKnowledgeDocumentContent } from '~/rag'
 
 interface OffscreenKnowledgeProcessRequest {
   payload: {

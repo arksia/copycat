@@ -4,7 +4,7 @@ import {
   buildKnowledgeContext,
   buildKnowledgeContextProjection,
   buildKnowledgeSearchQuery,
-} from '~/utils/knowledge/prompt'
+} from '~/rag'
 
 describe('buildKnowledgeSearchQuery', () => {
   it('uses the trailing prompt fragment instead of the entire prefix', () => {
