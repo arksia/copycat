@@ -7,6 +7,7 @@ import {
 } from '~/utils/completion/request'
 import { debounce, nextId } from '~/utils/core/base'
 import { openSettingsPage, sendRuntimeMessage } from '~/utils/core/runtime'
+import { getDisplayCompletion } from '~/utils/completion/display'
 import { GhostTextOverlay, syncPlaygroundGhostText } from '~/utils/ghost-text'
 import { PROVIDER_PRESETS } from '~/utils/providers'
 import {
@@ -387,7 +388,7 @@ async function requestCompletion() {
     })
     if (lastRequestId.value !== requestId)
       return
-    suggestion.value = response?.completion ?? ''
+    suggestion.value = getDisplayCompletion(response?.completion ?? '', previewSuffix.value)
     stageFastCompletion.value = response?.completion ?? ''
     lastLatencyMs.value = response?.latencyMs ?? null
     assignDebugState(response.debug)
@@ -456,7 +457,7 @@ async function requestEnhancedCompletion(args: {
     if (!shouldReplace)
       return
 
-    suggestion.value = response.completion
+    suggestion.value = getDisplayCompletion(response.completion, previewSuffix.value)
     lastLatencyMs.value = response.latencyMs
     assignDebugState(response.debug)
     queueGhostSync()

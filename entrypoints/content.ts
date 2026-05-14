@@ -11,6 +11,7 @@ import {
 } from '~/utils/completion/request'
 import { debounce, nextId } from '~/utils/core/base'
 import { sendRuntimeMessage } from '~/utils/core/runtime'
+import { getDisplayCompletion } from '~/utils/completion/display'
 import { resolveEditor } from '~/utils/editor-adapter'
 import { GhostTextOverlay } from '~/utils/ghost-text'
 import { isHostEnabled, loadSettings, onSettingsChanged } from '~/utils/settings'
@@ -292,6 +293,9 @@ class CopycatController {
         return
       if (editor.getPrefix() !== prefix)
         return
+      const suggestion = getDisplayCompletion(res.completion, editor.getSuffix())
+      if (!suggestion)
+        return
 
       this.active = {
         id,
@@ -299,9 +303,9 @@ class CopycatController {
         latencyMs: res.latencyMs,
         originalSuggestion: res.completion,
         prefix,
-        suggestion: res.completion,
+        suggestion,
       }
-      this.overlay.show(editor, res.completion)
+      this.overlay.show(editor, suggestion)
 
       if (shouldRequestEnhancedStage(res)) {
         void this.requestEnhancedCompletion({
@@ -357,6 +361,9 @@ class CopycatController {
         return
       if (!shouldPreferEnhancedCompletion(args.currentSuggestion, res.completion))
         return
+      const suggestion = getDisplayCompletion(res.completion, args.editor.getSuffix())
+      if (!suggestion)
+        return
 
       this.active = {
         id,
@@ -364,9 +371,9 @@ class CopycatController {
         latencyMs: res.latencyMs,
         originalSuggestion: res.completion,
         prefix: args.prefix,
-        suggestion: res.completion,
+        suggestion,
       }
-      this.overlay.show(args.editor, res.completion)
+      this.overlay.show(args.editor, suggestion)
     }
     catch (err) {
       if (!(err instanceof Error && /abort/i.test(err.message))) {
