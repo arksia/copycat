@@ -1,22 +1,22 @@
 import type { CompletionEvent, SoulObservedSignal } from '~/types'
 import { afterEach, describe, expect, it } from 'vitest'
-import { deleteCopycatDb } from '~/utils/db/client'
+import { deleteCopycatDb } from '~/utils/storage/client'
 import {
   getPersistedCompletion,
   putPersistedCompletion,
-} from '~/utils/db/repositories/completions'
+} from '~/utils/storage/repositories/completions'
 import {
   getCompletionEventStats,
   listRecentCompletionEventsByHost,
   putCompletionEvent,
-} from '~/utils/db/repositories/events'
+} from '~/utils/storage/repositories/events'
 import {
   listKnowledgeDocuments,
   listKnowledgeChunksByDocumentIds,
   putKnowledgeChunks,
   putKnowledgeDocument,
   searchKnowledgeChunks,
-} from '~/rag'
+} from '~/knowledge'
 import {
   getSoulObservedSignalSnapshot,
   listSoulObservedSignals,

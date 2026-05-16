@@ -1,10 +1,7 @@
 import type {
-  CompletionDebugInfo,
   CompletionError,
   CompletionEvent,
   CompletionEventStats,
-  CompletionRequest,
-  CompletionResponse,
   KnowledgeChunk,
   KnowledgeChunkEmbedding,
   KnowledgeDeleteResult,
@@ -14,20 +11,16 @@ import type {
   RuntimeMessage,
 } from '~/types'
 import {
-  buildCompletionCacheKey,
-  CompletionMemoryCache,
-  DEFAULT_COMPLETION_CACHE_TTL_MS,
-} from '~/utils/completion/cache'
-import { openSettingsPage } from '~/utils/core/runtime'
-import { getPersistedCompletion, putPersistedCompletion } from '~/utils/db/repositories/completions'
+  createBackgroundCompletionService,
+} from '~/utils/completion/background'
+import { openSettingsPage } from '~/utils/runtime'
 import {
   getCompletionEventStats,
   listRecentCompletionEventsByHost,
   putCompletionEvent,
-} from '~/utils/db/repositories/events'
+} from '~/utils/storage/repositories/events'
 import {
   getSoulObservedSignalSnapshot,
-  buildSoulProjection,
   deriveSoulObservedSignals,
   upsertSoulObservedSignal,
 } from '~/soul'
@@ -35,15 +28,9 @@ import {
   deleteKnowledgeDocument,
   importMarkdownKnowledge,
   listKnowledgeDocuments,
-  mergeCompletionContext,
-  resolveKnowledgeRetrievalBudget,
-  resolveCompletionKnowledge,
   searchKnowledgeChunks,
-} from '~/rag'
-import { buildCompletionDebugInfo } from '~/utils/completion/debug'
-import { completeOnce, completeOnceDetailed } from '~/utils/completion/client'
+} from '~/knowledge'
 import { loadSettings, saveSettings } from '~/utils/settings'
-import { deriveCompletionQualitySignal } from '~/utils/completion/telemetry'
 
 export default defineBackground(() => {
   const defaultKnowledgeBaseId = 'default'
@@ -53,9 +40,6 @@ export default defineBackground(() => {
   const semanticQueryCacheTtlMs = 30_000
   const telemetryWindowSize = 20
   let creatingOffscreenDocument: Promise<void> | null = null
-  const inFlight = new Map<string, AbortController>()
-  const requestSignalKeys = new Map<string, string>()
-  const completionCache = new CompletionMemoryCache()
   const semanticQueryEmbeddingCache = new Map<string, {
     expiresAt: number
     result: {
@@ -65,6 +49,14 @@ export default defineBackground(() => {
       queryEmbedding: number[]
     }
   }>()
+  const completionService = createBackgroundCompletionService({
+    defaultKnowledgeBaseId,
+    knowledgeContextMaxChars,
+    knowledgeDocumentTopK,
+    knowledgeTopK,
+    telemetryWindowSize,
+    resolveSemanticQueryEmbedding,
+  })
 
   chrome.runtime.onInstalled.addListener((details) => {
     if (details.reason === 'install') {
@@ -75,7 +67,7 @@ export default defineBackground(() => {
   chrome.runtime.onMessage.addListener((message: RuntimeMessage, _sender, sendResponse) => {
     switch (message.type) {
       case 'completion/request':
-        handleCompletion(message.payload)
+        completionService.handleCompletion(message.payload)
           .then(res => sendResponse({ ok: true, data: res }))
           .catch((err: unknown) => {
             const payload: CompletionError = {
@@ -87,7 +79,7 @@ export default defineBackground(() => {
         return true
 
       case 'completion/cancel':
-        cancel(message.payload.id)
+        completionService.cancel(message.payload.id)
         sendResponse({ ok: true })
         return false
 
@@ -224,274 +216,11 @@ export default defineBackground(() => {
     return false
   })
 
-  async function handleCompletion(req: CompletionRequest): Promise<CompletionResponse> {
-    const requestStart = performance.now()
-    const requestStage = req.stage ?? 'fast'
-    if (req.signalKey !== undefined && req.signalKey.length > 0) {
-      cancelBySignalKey(req.signalKey)
-    }
-    else {
-      cancel(req.id)
-    }
-
-    const settingsStart = performance.now()
-    const settings = await loadSettings()
-    const settingsMs = Math.round(performance.now() - settingsStart)
-    if (!settings.enabled) {
-      return emptyResponse(req.id, settings.provider, settings.model, requestStage)
-    }
-    if (!settings.baseUrl) {
-      throw new Error('Missing base URL. Please open the settings page to configure Copycat.')
-    }
-
-    const telemetryHost = resolveTelemetryHostFromRequest(req)
-    const telemetryStart = performance.now()
-    const telemetryStats
-      = telemetryHost !== null && telemetryHost.length > 0
-        ? await getCompletionEventStats(telemetryHost, telemetryWindowSize)
-        : null
-    const soulSignals = req.debug
-      ? await getSoulObservedSignalSnapshot({
-          limit: 8,
-          matureOnly: true,
-        })
-      : undefined
-    const telemetryMs = Math.round(performance.now() - telemetryStart)
-    const qualitySignal = telemetryStats === null ? undefined : deriveCompletionQualitySignal(telemetryStats)
-    const shouldRunEnhancedStage = requestStage === 'fast' && qualitySignal?.shouldBoostKnowledge === true
-    const knowledgeBudget = requestStage === 'enhanced'
-      ? resolveKnowledgeRetrievalBudget({
-          baseTopK: knowledgeTopK,
-          baseMaxChars: knowledgeContextMaxChars,
-          qualitySignal,
-        })
-      : {
-          topK: knowledgeTopK,
-          maxChars: knowledgeContextMaxChars,
-        }
-    const knowledgeStart = performance.now()
-    const knowledgeResolution = await resolveCompletionKnowledge({
-      budget: knowledgeBudget,
-      defaultKnowledgeBaseId,
-      knowledgeDocumentTopK,
-      minPrefixChars: settings.minPrefixChars,
-      prefix: req.prefix,
-      resolveSemanticQueryEmbedding,
-    })
-    const knowledgeMs = Math.round(performance.now() - knowledgeStart)
-    const completionContext = mergeCompletionContext(req.context, knowledgeResolution.context)
-    const soulProjection = buildSoulProjection(settings.soul)
-    const soulContext = soulProjection.context
-    const cacheKey = buildCompletionCacheKey({
-      provider: settings.provider,
-      model: settings.model,
-      prefix: req.prefix,
-      suffix: req.suffix,
-      context: completionContext,
-      soulContext,
-    })
-    const cached = completionCache.get(cacheKey)
-    if (cached !== null && !req.debug) {
-      return {
-        id: req.id,
-        completion: cached,
-        latencyMs: 0,
-        provider: settings.provider,
-        model: settings.model,
-        stage: requestStage,
-        shouldRunEnhancedStage,
-      }
-    }
-    if (!req.debug) {
-      const persisted = await getPersistedCompletion(cacheKey)
-      if (persisted !== null) {
-        completionCache.set(cacheKey, persisted)
-        return {
-          id: req.id,
-          completion: persisted,
-          latencyMs: 0,
-          provider: settings.provider,
-          model: settings.model,
-          stage: requestStage,
-          shouldRunEnhancedStage,
-        }
-      }
-    }
-
-    const controller = new AbortController()
-    inFlight.set(req.id, controller)
-    if (req.signalKey !== undefined && req.signalKey.length > 0) {
-      requestSignalKeys.set(req.signalKey, req.id)
-    }
-
-    const llmStart = performance.now()
-    try {
-      const detailed = req.debug
-        ? await completeOnceDetailed({
-            prefix: req.prefix,
-            suffix: req.suffix,
-            context: completionContext,
-            settings,
-            signal: controller.signal,
-          })
-        : {
-            completion: await completeOnce({
-              prefix: req.prefix,
-              suffix: req.suffix,
-              context: completionContext,
-              settings,
-              signal: controller.signal,
-            }),
-            debug: undefined,
-          }
-      const completion = detailed.completion
-      if (completion) {
-        completionCache.set(cacheKey, completion)
-        void putPersistedCompletion({
-          key: cacheKey,
-          value: completion,
-          expiresAt: Date.now() + DEFAULT_COMPLETION_CACHE_TTL_MS,
-          updatedAt: Date.now(),
-        }).catch((error: unknown) => {
-          console.warn('[copycat] failed to persist completion cache', error)
-        })
-      }
-      const llmMs = Math.round(performance.now() - llmStart)
-      const totalMs = Math.round(performance.now() - requestStart)
-      const timings = {
-        totalMs,
-        settingsMs,
-        telemetryMs,
-        knowledgeMs,
-        llmMs,
-      }
-
-      logDevCompletionTimings({
-        id: req.id,
-        stage: requestStage,
-        prefixLength: req.prefix.length,
-        timings: {
-          ...timings,
-          knowledge: knowledgeResolution.timings,
-        },
-        recallStrategy: knowledgeResolution.recall?.strategy,
-        rerankStrategy: knowledgeResolution.rerank?.strategy,
-      })
-
-      return {
-        id: req.id,
-        completion,
-        latencyMs: llmMs,
-        provider: settings.provider,
-        model: settings.model,
-        stage: requestStage,
-        shouldRunEnhancedStage,
-        debug: buildCompletionDebugInfo(detailed.debug, {
-          appliedStrategy: {
-            requestStage,
-            shouldRunEnhancedStage,
-            telemetryWindowSize,
-            knowledgeBudget,
-          },
-          timings,
-          knowledgeResolution,
-          soul: {
-            context: soulContext,
-            enabled: settings.soul.enabled,
-            budget: soulProjection.meta,
-          },
-          soulSignals: soulSignals === undefined
-            ? undefined
-            : {
-                triggered: true,
-                totalCount: soulSignals.totalCount,
-                matureCount: soulSignals.matureCount,
-                signals: soulSignals.signals.map(signal => ({
-                  id: signal.id,
-                  kind: signal.kind,
-                  value: signal.value,
-                  confidence: signal.confidence,
-                  count: signal.count,
-                  acceptedCount: signal.acceptedCount,
-                  rejectedCount: signal.rejectedCount,
-                  ignoredCount: signal.ignoredCount,
-                  distinctContextCount: signal.distinctContextCount,
-                  evidence: signal.evidence,
-                })),
-              },
-          telemetry: telemetryStats === null
-            ? undefined
-            : {
-                host: telemetryHost ?? 'unknown',
-                stats: telemetryStats,
-              },
-        }),
-      }
-    }
-    catch (error) {
-      if (error instanceof Error && error.name === 'AbortError') {
-        return emptyResponse(req.id, settings.provider, settings.model, requestStage)
-      }
-      throw error
-    }
-    finally {
-      clearRequest(req.id, req.signalKey)
-    }
-  }
-
-  function cancel(id: string) {
-    const ctrl = inFlight.get(id)
-    if (ctrl) {
-      ctrl.abort()
-    }
-    clearRequest(id)
-  }
-
-  function cancelBySignalKey(signalKey: string) {
-    const requestId = requestSignalKeys.get(signalKey)
-    if (requestId === undefined)
-      return
-    cancel(requestId)
-  }
-
-  function clearRequest(id: string, signalKey?: string) {
-    inFlight.delete(id)
-    if (signalKey !== undefined && signalKey.length > 0) {
-      const activeId = requestSignalKeys.get(signalKey)
-      if (activeId === id) {
-        requestSignalKeys.delete(signalKey)
-      }
-      return
-    }
-    for (const [key, value] of requestSignalKeys.entries()) {
-      if (value === id) {
-        requestSignalKeys.delete(key)
-      }
-    }
-  }
-
   async function persistSoulObservedSignals(event: CompletionEvent): Promise<void> {
     const tags = deriveSoulObservedSignals({ event })
 
     for (const tag of tags) {
       await upsertSoulObservedSignal(tag)
-    }
-  }
-
-  function emptyResponse(
-    id: string,
-    provider: CompletionResponse['provider'],
-    model: string,
-    stage: CompletionResponse['stage'],
-  ) {
-    return {
-      id,
-      completion: '',
-      latencyMs: 0,
-      provider,
-      model,
-      stage,
-      shouldRunEnhancedStage: false,
     }
   }
 
@@ -579,13 +308,6 @@ export default defineBackground(() => {
         reject(new Error(response?.error?.error ?? 'Offscreen processing failed'))
       })
     })
-  }
-
-  function resolveTelemetryHostFromRequest(req: CompletionRequest): string | null {
-    if (req.signalKey !== undefined && req.signalKey.length > 0 && req.signalKey.includes('::')) {
-      return req.signalKey.split('::')[0] ?? null
-    }
-    return null
   }
 
   async function embedKnowledgeChunks(chunks: KnowledgeChunk[]): Promise<Array<KnowledgeChunkEmbedding | undefined>> {
@@ -690,28 +412,6 @@ export default defineBackground(() => {
         state: 'skipped',
       }
     }
-  }
-
-  function logDevCompletionTimings(args: {
-    id: string
-    stage: 'enhanced' | 'fast'
-    prefixLength: number
-    timings: NonNullable<CompletionDebugInfo['timings']>
-    recallStrategy?: NonNullable<CompletionDebugInfo['knowledgeRecall']>['strategy']
-    rerankStrategy?: NonNullable<CompletionDebugInfo['knowledgeRerank']>['strategy']
-  }) {
-    if (!import.meta.env.DEV) {
-      return
-    }
-
-    console.info('[copycat][timings]', {
-      id: args.id,
-      stage: args.stage,
-      prefixLength: args.prefixLength,
-      recallStrategy: args.recallStrategy ?? 'none',
-      rerankStrategy: args.rerankStrategy ?? 'none',
-      timings: args.timings,
-    })
   }
 
 })

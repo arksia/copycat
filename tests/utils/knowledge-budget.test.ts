@@ -1,6 +1,6 @@
 import type { CompletionQualitySignal } from '~/utils/completion/telemetry'
 import { describe, expect, it } from 'vitest'
-import { resolveKnowledgeRetrievalBudget } from '~/rag'
+import { resolveKnowledgeRetrievalBudget } from '~/knowledge'
 
 function buildSignal(partial: Partial<CompletionQualitySignal>): CompletionQualitySignal {
   return {

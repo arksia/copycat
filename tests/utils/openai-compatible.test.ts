@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   extractAssistantMessageContent,
-} from '~/utils/openai-compatible'
+} from '~/utils/providers/openai-compatible'
 
 describe('extractAssistantMessageContent', () => {
   it('returns the first assistant content string when present', () => {

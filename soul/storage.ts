@@ -1,7 +1,7 @@
 import type { SoulObservedSignal, SoulObservedSignalSnapshot } from '~/types'
 import { nextId } from '~/utils/core/base'
-import { openCopycatDb, requestToPromise, transactionToPromise } from '~/utils/db/client'
-import { DB_INDEXES, DB_STORES } from '~/utils/db/schema'
+import { openCopycatDb, requestToPromise, transactionToPromise } from '~/utils/storage/client'
+import { DB_INDEXES, DB_STORES } from '~/utils/storage/schema'
 
 export interface ListSoulObservedSignalsArgs {
   limit?: number

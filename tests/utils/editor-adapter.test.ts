@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { EDITOR_RESOLVERS, resolveEditor } from '~/utils/editor-adapter'
+import { EDITOR_RESOLVERS, resolveEditor } from '~/integrations/editors/adapter'
 
 describe('resolveEditor', () => {
   it('prefers the native text resolver for textareas', () => {

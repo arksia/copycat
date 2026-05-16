@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { GhostTextOverlay, syncPlaygroundGhostText } from '~/utils/ghost-text'
+import { GhostTextOverlay, syncPlaygroundGhostText } from '~/integrations/overlay/ghost-text'
 
 afterEach(() => {
   document.body.innerHTML = ''

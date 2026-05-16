@@ -113,7 +113,7 @@ copycat/
 │   ├── openai-compatible.ts# OpenAI-compatible host helpers
 │   ├── providers.ts        # Groq / OpenAI / DeepSeek / Ollama presets
 │   └── settings.ts         # chrome.storage.local schema & helpers
-├── rag/                    # Local knowledge import, embedding, retrieval, prompt packing
+├── knowledge/               # Local knowledge import, embedding, retrieval, prompt packing
 ├── soul/                   # Soul profile, projection, and observed signal storage
 ├── types/index.ts          # Shared types
 ├── assets/tailwind.css     # Styles

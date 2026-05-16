@@ -11,16 +11,16 @@ import type {
   ProviderId,
   Settings,
 } from '~/types'
-import type { DiscoveredModel } from '~/utils/openai-compatible'
+import type { DiscoveredModel } from '~/utils/providers/openai-compatible'
 import { computed, onMounted, ref, watch } from 'vue'
-import { sendRuntimeMessage } from '~/utils/core/runtime'
+import { sendRuntimeMessage } from '~/utils/runtime'
 import {
   buildModelsUrl,
   buildOpenAICompatibleHeaders,
   extractAssistantMessageContent,
   joinOpenAICompatibleUrl,
   parseModelListResponse,
-} from '~/utils/openai-compatible'
+} from '~/utils/providers/openai-compatible'
 import { PROVIDER_ORDER, PROVIDER_PRESETS, resolveProviderPreset } from '~/utils/providers'
 import {
   DEFAULT_SETTINGS,

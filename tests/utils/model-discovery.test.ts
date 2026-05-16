@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseModelListResponse } from '~/utils/openai-compatible'
+import { parseModelListResponse } from '~/utils/providers/openai-compatible'
 
 describe('parseModelListResponse', () => {
   it('extracts model ids from a standard models response', () => {

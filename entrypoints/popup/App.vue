@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Settings } from '~/types'
 import { onMounted, ref } from 'vue'
-import { openSettingsPage } from '~/utils/core/runtime'
+import { openSettingsPage } from '~/utils/runtime'
 import { isHostEnabled, loadSettings, saveSettings } from '~/utils/settings'
 
 const settings = ref<Settings | null>(null)

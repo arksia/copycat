@@ -2,7 +2,7 @@ import type { CompletionDebugInfo, Settings } from '~/types'
 import {
   buildOpenAICompatibleHeaders,
   joinOpenAICompatibleUrl,
-} from '../openai-compatible'
+} from '~/utils/providers/openai-compatible'
 import { buildSoulProjection } from '~/soul'
 import { buildCompletionUserPrompt } from './prompt'
 

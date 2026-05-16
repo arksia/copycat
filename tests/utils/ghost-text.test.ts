@@ -1,6 +1,6 @@
-import type { EditorHandle } from '~/utils/editor-adapter'
+import type { EditorHandle } from '~/integrations/editors/adapter'
 import { afterEach, describe, expect, it } from 'vitest'
-import { GhostTextOverlay } from '~/utils/ghost-text'
+import { GhostTextOverlay } from '~/integrations/overlay/ghost-text'
 
 afterEach(() => {
   document.documentElement

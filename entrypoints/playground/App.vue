@@ -7,8 +7,8 @@ import {
 } from '~/utils/completion/request'
 import { supportsInlineCompletion } from '~/utils/completion/position'
 import { debounce, nextId } from '~/utils/core/base'
-import { openSettingsPage, sendRuntimeMessage } from '~/utils/core/runtime'
-import { GhostTextOverlay, syncPlaygroundGhostText } from '~/utils/ghost-text'
+import { openSettingsPage, sendRuntimeMessage } from '~/utils/runtime'
+import { GhostTextOverlay, syncPlaygroundGhostText } from '~/integrations/overlay/ghost-text'
 import { PROVIDER_PRESETS } from '~/utils/providers'
 import {
   buildStageActivityLines,

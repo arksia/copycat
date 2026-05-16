@@ -4,7 +4,7 @@ import type {
   CompletionResponse,
   Settings,
 } from '~/types'
-import type { EditorHandle } from '~/utils/editor-adapter'
+import type { EditorHandle } from '~/integrations/editors/adapter'
 import type {
   CompletionEffect,
   CompletionSnapshot,
@@ -14,9 +14,9 @@ import { buildCompletionFingerprint, buildCompletionSignalKey } from '~/utils/co
 import { CompletionController } from '~/utils/completion/controller'
 import { supportsInlineCompletion } from '~/utils/completion/position'
 import { debounce, nextId } from '~/utils/core/base'
-import { sendRuntimeMessage } from '~/utils/core/runtime'
-import { resolveEditor } from '~/utils/editor-adapter'
-import { GhostTextOverlay } from '~/utils/ghost-text'
+import { sendRuntimeMessage } from '~/utils/runtime'
+import { resolveEditor } from '~/integrations/editors/adapter'
+import { GhostTextOverlay } from '~/integrations/overlay/ghost-text'
 import { isHostEnabled, loadSettings, onSettingsChanged } from '~/utils/settings'
 
 export default defineContentScript({
