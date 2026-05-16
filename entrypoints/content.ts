@@ -5,20 +5,19 @@ import type {
   Settings,
 } from '~/types'
 import type { EditorHandle } from '~/utils/editor-adapter'
-import {
-  buildCompletionFingerprint,
-  buildCompletionSignalKey,
-} from '~/utils/completion/request'
+import type {
+  CompletionEffect,
+  CompletionSnapshot,
+  CompletionState,
+} from '~/utils/completion/state'
+import { buildCompletionFingerprint, buildCompletionSignalKey } from '~/utils/completion/request'
+import { CompletionController } from '~/utils/completion/controller'
+import { supportsInlineCompletion } from '~/utils/completion/position'
 import { debounce, nextId } from '~/utils/core/base'
 import { sendRuntimeMessage } from '~/utils/core/runtime'
-import { getDisplayCompletion } from '~/utils/completion/display'
 import { resolveEditor } from '~/utils/editor-adapter'
 import { GhostTextOverlay } from '~/utils/ghost-text'
 import { isHostEnabled, loadSettings, onSettingsChanged } from '~/utils/settings'
-import {
-  shouldPreferEnhancedCompletion,
-  shouldRequestEnhancedStage,
-} from '~/utils/completion/staging'
 
 export default defineContentScript({
   matches: ['<all_urls>'],
@@ -30,41 +29,35 @@ export default defineContentScript({
 })
 
 function startCopycatController(): void {
-  void new CopycatController()
+  void new CopycatFlowController()
 }
 
-interface ActiveSuggestion {
-  id: string
-  editor: EditorHandle
-  latencyMs: number
-  originalSuggestion: string
-  prefix: string
-  suggestion: string
+function createEditorId(editor: EditorHandle): string {
+  const host = editor.el.getAttribute('data-copycat-editor-id')
+  if (host) {
+    return host
+  }
+  const id = nextId('editor')
+  editor.el.setAttribute('data-copycat-editor-id', id)
+  return id
 }
 
-class CopycatController {
+class CopycatFlowController {
   private settings: Settings | null = null
   private overlay = new GhostTextOverlay()
   private activeEditor: EditorHandle | null = null
-  private active: ActiveSuggestion | null = null
-  private composing = false
-  private lastRequestId: string | null = null
-  private pendingFingerprint: string | null = null
-  private debouncedRequest: ReturnType<typeof debounce<() => void>>
+  private snapshotRevision = 0
+  private debounceHandles = new Map<string, ReturnType<typeof debounce<() => void>>>()
+  private controller = new CompletionController({
+    onEffects: (effects, state) => {
+      void this.applyEffects(effects, state)
+    },
+  })
+  private attached = false
 
   constructor() {
-    this.debouncedRequest = debounce(() => {
-      void this.requestCompletion()
-    }, 300)
-
     void loadSettings().then((s) => {
       this.settings = s
-      this.debouncedRequest = debounce(
-        () => {
-          void this.requestCompletion()
-        },
-        Math.max(50, s.debounceMs),
-      )
       if (isHostEnabled(s, location.href)) {
         this.attach()
       }
@@ -72,20 +65,11 @@ class CopycatController {
 
     onSettingsChanged((s) => {
       this.settings = s
-      this.debouncedRequest.cancel()
-      this.debouncedRequest = debounce(
-        () => {
-          void this.requestCompletion()
-        },
-        Math.max(50, s.debounceMs),
-      )
       if (isHostEnabled(s, location.href))
         this.attach()
       else this.detach()
     })
   }
-
-  private attached = false
 
   private attach() {
     if (this.attached)
@@ -98,334 +82,305 @@ class CopycatController {
     document.addEventListener('keydown', this.onKeyDown, true)
     document.addEventListener('compositionstart', this.onCompositionStart, true)
     document.addEventListener('compositionend', this.onCompositionEnd, true)
-    document.addEventListener('scroll', this.onReposition, true)
-    window.addEventListener('resize', this.onReposition, true)
     document.addEventListener('selectionchange', this.onSelectionChange, true)
     document.addEventListener('mousedown', this.onMouseDown, true)
+    document.addEventListener('scroll', this.onReposition, true)
+    window.addEventListener('resize', this.onReposition, true)
   }
 
   private detach() {
     if (!this.attached)
       return
     this.attached = false
-    this.dismiss()
     document.removeEventListener('focusin', this.onFocusIn, true)
     document.removeEventListener('focusout', this.onFocusOut, true)
     document.removeEventListener('input', this.onInput, true)
     document.removeEventListener('keydown', this.onKeyDown, true)
     document.removeEventListener('compositionstart', this.onCompositionStart, true)
     document.removeEventListener('compositionend', this.onCompositionEnd, true)
-    document.removeEventListener('scroll', this.onReposition, true)
-    window.removeEventListener('resize', this.onReposition, true)
     document.removeEventListener('selectionchange', this.onSelectionChange, true)
     document.removeEventListener('mousedown', this.onMouseDown, true)
+    document.removeEventListener('scroll', this.onReposition, true)
+    window.removeEventListener('resize', this.onReposition, true)
+    this.deactivateEditor()
+  }
+
+  private logDebug(event: string, extra: Record<string, unknown> = {}) {
+    const snapshot = this.controller.getState().snapshot
+    console.debug('[copycat][flow]', event, {
+      mode: this.controller.getState().mode,
+      prefixLength: snapshot?.prefix.length ?? 0,
+      suffixLength: snapshot?.suffix.length ?? 0,
+      ...extra,
+    })
   }
 
   private onFocusIn = (e: FocusEvent) => {
     const editor = resolveEditor(e.target)
-    if (editor) {
-      this.activeEditor = editor
+    if (!editor) {
+      return
     }
+    this.activeEditor = editor
+    this.refreshSnapshot(editor)
   }
 
-  private onFocusOut = (_e: FocusEvent) => {
-    // Delay so focus moving between the editor and a toolbar doesn't dismiss.
+  private onFocusOut = () => {
     setTimeout(() => {
       const active = document.activeElement as HTMLElement | null
       if (!active || !resolveEditor(active)) {
-        this.dismiss()
-        this.activeEditor = null
+        this.deactivateEditor()
       }
     }, 50)
   }
 
   private onMouseDown = (e: MouseEvent) => {
     const ghost = (e.target as HTMLElement)?.closest?.('[data-copycat-ghost]')
-    if (ghost !== null)
+    if (ghost !== null) {
       return
-    this.dismiss()
+    }
+    if (this.activeEditor) {
+      this.refreshSnapshot(this.activeEditor)
+    }
   }
 
   private onSelectionChange = () => {
-    if (!this.active)
-      return
     if (!this.activeEditor)
       return
-    if (this.activeEditor.getPrefix() !== this.active.prefix) {
-      this.dismiss()
-    }
+    this.refreshSnapshot(this.activeEditor)
   }
 
   private onCompositionStart = () => {
-    this.composing = true
-    this.dismiss()
+    this.controller.dispatch({ type: 'COMPOSITION_STARTED' })
   }
 
   private onCompositionEnd = () => {
-    this.composing = false
-    this.scheduleRequest()
+    if (!this.activeEditor) {
+      return
+    }
+    const snapshot = this.buildSnapshot(this.activeEditor)
+    if (!snapshot) {
+      return
+    }
+    this.controller.dispatch({
+      snapshot,
+      type: 'COMPOSITION_ENDED',
+    })
   }
 
   private onInput = (e: Event) => {
-    if (this.composing)
-      return
     const editor = resolveEditor(e.target)
-    if (!editor)
+    if (!editor) {
       return
-    this.activeEditor = editor
-
-    if (this.active) {
-      // Accept-by-typing: if user typed the next character(s) of the suggestion,
-      // trim the ghost text rather than dismissing it entirely.
-      const newPrefix = editor.getPrefix()
-      if (newPrefix.startsWith(this.active.prefix)) {
-        const typed = newPrefix.slice(this.active.prefix.length)
-        if (typed && this.active.suggestion.startsWith(typed)) {
-          const remaining = this.active.suggestion.slice(typed.length)
-          if (!remaining) {
-            this.dismiss('accepted')
-          }
-          else {
-            this.active = {
-              ...this.active,
-              prefix: newPrefix,
-              suggestion: remaining,
-            }
-            this.overlay.show(editor, remaining)
-          }
-          return
-        }
-      }
-      this.dismiss()
     }
-    this.scheduleRequest()
+    this.activeEditor = editor
+    this.refreshSnapshot(editor)
   }
 
   private onKeyDown = (e: KeyboardEvent) => {
-    if (!this.active)
+    const state = this.controller.getState()
+    if (!state.session || !this.activeEditor)
       return
     if (e.isComposing)
       return
 
-    if (e.key === 'Tab') {
+    if (e.key === 'Tab' && state.session.suggestion) {
       e.preventDefault()
       e.stopPropagation()
-      this.acceptActive()
+      this.activeEditor.insertAtCaret(state.session.suggestion)
+      this.controller.dispatch({
+        sessionId: state.session.sessionId,
+        type: 'SUGGESTION_ACCEPTED',
+      })
       return
     }
+
     if (e.key === 'Escape') {
       e.preventDefault()
       e.stopPropagation()
-      this.dismiss('rejected')
+      this.controller.dispatch({
+        sessionId: state.session.sessionId,
+        type: 'SUGGESTION_REJECTED',
+      })
       return
-    }
-    if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(e.key)) {
-      this.dismiss()
     }
   }
 
   private onReposition = () => {
-    if (this.active && this.activeEditor) {
-      this.overlay.show(this.activeEditor, this.active.suggestion)
+    const state = this.controller.getState()
+    if (!this.activeEditor || !state.session?.suggestion) {
+      return
     }
+    this.overlay.show(this.activeEditor, state.session.suggestion)
   }
 
-  private scheduleRequest() {
-    if (!this.settings)
-      return
-    if (!this.activeEditor)
-      return
-    if (this.composing)
-      return
-
-    const prefix = this.activeEditor.getPrefix()
-    if (prefix.trim().length < this.settings.minPrefixChars) {
-      this.dismiss()
-      return
-    }
-    this.debouncedRequest()
-  }
-
-  private async requestCompletion() {
-    if (!this.settings || !this.activeEditor)
-      return
-    const editor = this.activeEditor
-    const prefix = editor.getPrefix()
-    if (prefix.trim().length < this.settings.minPrefixChars) {
-      this.pendingFingerprint = null
-      this.lastRequestId = null
-      return
-    }
-    const suffix = editor.getSuffix()
-    const fingerprint = buildCompletionFingerprint({
-      host: location.host,
-      editorKind: editor.kind,
-      prefix,
-      suffix,
+  private deactivateEditor() {
+    this.activeEditor = null
+    this.controller.dispatch({
+      type: 'EDITOR_DEACTIVATED',
     })
-    if (fingerprint === this.pendingFingerprint)
-      return
+  }
 
-    const id = nextId('req')
-    this.lastRequestId = id
-    this.pendingFingerprint = fingerprint
-    const signalKey = buildCompletionSignalKey(location.host, editor.kind)
-
-    const req: CompletionRequest = {
-      id,
-      prefix,
-      suffix,
-      signalKey,
-      stage: 'fast',
+  private buildSnapshot(editor: EditorHandle): CompletionSnapshot | null {
+    if (!this.settings) {
+      return null
     }
-
-    try {
-      const res = await sendRuntimeMessage<CompletionResponse>({
-        type: 'completion/request',
-        payload: req,
-      })
-      if (this.lastRequestId !== id)
-        return
-      this.pendingFingerprint = null
-      if (res.completion.length === 0)
-        return
-      if (editor !== this.activeEditor)
-        return
-      if (editor.getPrefix() !== prefix)
-        return
-      const suggestion = getDisplayCompletion(res.completion, editor.getSuffix())
-      if (!suggestion)
-        return
-
-      this.active = {
-        id,
-        editor,
-        latencyMs: res.latencyMs,
-        originalSuggestion: res.completion,
+    const prefix = editor.getPrefix()
+    const suffix = editor.getSuffix()
+    const value = prefix + suffix
+    const selectionStart = prefix.length
+    const selectionEnd = value.length - suffix.length
+    this.snapshotRevision += 1
+    return {
+      editorId: createEditorId(editor),
+      editorKind: editor.kind,
+      eligible: !this.controller.getState().composeActive
+        && prefix.trim().length >= this.settings.minPrefixChars
+        && supportsInlineCompletion(suffix),
+      fingerprint: buildCompletionFingerprint({
+        host: location.host,
+        editorKind: editor.kind,
         prefix,
-        suggestion,
-      }
-      this.overlay.show(editor, suggestion)
-
-      if (shouldRequestEnhancedStage(res)) {
-        void this.requestEnhancedCompletion({
-          currentSuggestion: res.completion,
-          editor,
-          prefix,
-          signalKey,
-          suffix,
-        })
-      }
-    }
-    catch (err) {
-      if (this.lastRequestId === id) {
-        this.pendingFingerprint = null
-        this.lastRequestId = null
-      }
-      if (!(err instanceof Error && /abort/i.test(err.message))) {
-        console.warn('[copycat] completion error:', err)
-      }
+        suffix,
+      }),
+      prefix,
+      revision: this.snapshotRevision,
+      selectionEnd,
+      selectionStart,
+      suffix,
+      value,
     }
   }
 
-  private async requestEnhancedCompletion(args: {
-    currentSuggestion: string
-    editor: EditorHandle
-    prefix: string
-    signalKey: string
-    suffix?: string
-  }) {
-    if (!this.settings)
+  private refreshSnapshot(editor: EditorHandle) {
+    const snapshot = this.buildSnapshot(editor)
+    if (!snapshot) {
       return
+    }
+    this.logDebug('snapshot-updated', {
+      eligible: snapshot.eligible,
+      revision: snapshot.revision,
+    })
+    this.controller.dispatch({
+      snapshot,
+      type: 'SNAPSHOT_UPDATED',
+    })
+  }
 
-    const id = nextId('req')
-    this.lastRequestId = id
+  private async applyEffects(effects: CompletionEffect[], state: CompletionState) {
+    for (const effect of effects) {
+      switch (effect.type) {
+        case 'SCHEDULE_DEBOUNCE': {
+          const existing = this.debounceHandles.get(effect.sessionId)
+          existing?.cancel()
+          const handle = debounce(() => {
+            this.controller.dispatch({
+              sessionId: effect.sessionId,
+              type: 'DEBOUNCE_ELAPSED',
+            })
+          }, Math.max(50, this.settings?.debounceMs ?? 300))
+          this.debounceHandles.set(effect.sessionId, handle)
+          handle()
+          break
+        }
 
-    try {
-      const res = await sendRuntimeMessage<CompletionResponse>({
-        type: 'completion/request',
-        payload: {
-          id,
-          prefix: args.prefix,
-          suffix: args.suffix,
-          signalKey: args.signalKey,
-          stage: 'enhanced',
-        },
-      })
+        case 'CANCEL_DEBOUNCE': {
+          const handle = this.debounceHandles.get(effect.sessionId)
+          handle?.cancel()
+          this.debounceHandles.delete(effect.sessionId)
+          break
+        }
 
-      if (this.lastRequestId !== id)
-        return
-      if (args.editor !== this.activeEditor)
-        return
-      if (args.editor.getPrefix() !== args.prefix)
-        return
-      if (!shouldPreferEnhancedCompletion(args.currentSuggestion, res.completion))
-        return
-      const suggestion = getDisplayCompletion(res.completion, args.editor.getSuffix())
-      if (!suggestion)
-        return
+        case 'REQUEST_COMPLETION': {
+          if (!state.snapshot || !state.session || state.session.sessionId !== effect.sessionId) {
+            break
+          }
+          const requestId = nextId('req')
+          this.controller.dispatch({
+            requestId,
+            sessionId: effect.sessionId,
+            type: effect.stage === 'fast' ? 'FAST_REQUEST_STARTED' : 'ENHANCED_REQUEST_STARTED',
+          })
+          const req: CompletionRequest = {
+            id: requestId,
+            prefix: state.snapshot.prefix,
+            suffix: state.snapshot.suffix,
+            signalKey: buildCompletionSignalKey(location.host, state.snapshot.editorKind as EditorHandle['kind']),
+            stage: effect.stage,
+          }
+          try {
+            const res = await sendRuntimeMessage<CompletionResponse>({
+              type: 'completion/request',
+              payload: req,
+            })
+            this.controller.dispatch(effect.stage === 'fast'
+              ? {
+                  latencyMs: res.latencyMs,
+                  originalSuggestion: res.completion,
+                  requestId,
+                  sessionId: effect.sessionId,
+                  shouldRunEnhancedStage: res.stage === 'fast' && res.shouldRunEnhancedStage,
+                  suggestion: res.completion,
+                  type: 'FAST_REQUEST_RESOLVED',
+                }
+              : {
+                  latencyMs: res.latencyMs,
+                  originalSuggestion: res.completion,
+                  requestId,
+                  sessionId: effect.sessionId,
+                  suggestion: res.completion,
+                  type: 'ENHANCED_REQUEST_RESOLVED',
+                })
+          }
+          catch {
+            this.controller.dispatch({
+              sessionId: effect.sessionId,
+              type: 'SESSION_CANCELLED',
+            })
+          }
+          break
+        }
 
-      this.active = {
-        id,
-        editor: args.editor,
-        latencyMs: res.latencyMs,
-        originalSuggestion: res.completion,
-        prefix: args.prefix,
-        suggestion,
+        case 'CANCEL_REQUEST': {
+          if (effect.requestId) {
+            void sendRuntimeMessage({
+              type: 'completion/cancel',
+              payload: { id: effect.requestId },
+            }).catch(() => {})
+          }
+          break
+        }
+
+        case 'SHOW_SUGGESTION': {
+          if (!this.activeEditor) {
+            break
+          }
+          this.overlay.show(this.activeEditor, effect.suggestion)
+          break
+        }
+
+        case 'CLEAR_SUGGESTION': {
+          this.overlay.hide()
+          break
+        }
+
+        case 'EMIT_EVENT': {
+          const id = nextId('evt')
+          const payload: CompletionEvent = {
+            action: effect.action,
+            host: location.host,
+            id,
+            latencyMs: effect.latencyMs,
+            prefix: effect.prefix,
+            suggestion: effect.suggestion,
+            timestamp: Date.now(),
+          }
+          void sendRuntimeMessage<void>({
+            type: 'completion/event',
+            payload,
+          }).catch(() => {})
+          break
+        }
       }
-      this.overlay.show(args.editor, suggestion)
     }
-    catch (err) {
-      if (!(err instanceof Error && /abort/i.test(err.message))) {
-        console.warn('[copycat] enhanced completion error:', err)
-      }
-    }
-  }
-
-  private acceptActive() {
-    if (!this.active)
-      return
-    const active = this.active
-    const { editor, suggestion } = active
-    this.overlay.hide()
-    this.active = null
-    editor.insertAtCaret(suggestion)
-    this.emitCompletionEvent(active, 'accepted')
-  }
-
-  private dismiss(action: CompletionEvent['action'] = 'ignored') {
-    if (this.lastRequestId !== null) {
-      void sendRuntimeMessage({ type: 'completion/cancel', payload: { id: this.lastRequestId } }).catch(
-        () => {},
-      )
-      this.lastRequestId = null
-    }
-    this.pendingFingerprint = null
-    this.debouncedRequest.cancel()
-    if (this.active) {
-      this.emitCompletionEvent(this.active, action)
-      this.active = null
-    }
-    this.overlay.hide()
-  }
-
-  private emitCompletionEvent(
-    active: ActiveSuggestion,
-    action: CompletionEvent['action'],
-  ) {
-    const payload: CompletionEvent = {
-      id: active.id,
-      prefix: active.prefix,
-      suggestion: active.originalSuggestion,
-      action,
-      latencyMs: active.latencyMs,
-      timestamp: Date.now(),
-      host: location.host,
-    }
-
-    void sendRuntimeMessage<void>({
-      type: 'completion/event',
-      payload,
-    }).catch(() => {})
   }
 }

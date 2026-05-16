@@ -5,9 +5,9 @@ import {
   buildCompletionFingerprint,
   buildCompletionSignalKey,
 } from '~/utils/completion/request'
+import { supportsInlineCompletion } from '~/utils/completion/position'
 import { debounce, nextId } from '~/utils/core/base'
 import { openSettingsPage, sendRuntimeMessage } from '~/utils/core/runtime'
-import { getDisplayCompletion } from '~/utils/completion/display'
 import { GhostTextOverlay, syncPlaygroundGhostText } from '~/utils/ghost-text'
 import { PROVIDER_PRESETS } from '~/utils/providers'
 import {
@@ -67,6 +67,8 @@ const lastRequestId = ref('')
 const lastLatencyMs = ref<number | null>(null)
 const settings = ref<Settings | null>(null)
 const lastFingerprint = ref('')
+const flowLogs = ref<string[]>([])
+const flowLogsCopied = ref(false)
 const completionMode = computed(() => {
   if (loading.value)
     return 'Requesting'
@@ -272,7 +274,7 @@ const debouncedRequest = debounce(() => {
 
 onMounted(async () => {
   settings.value = await loadSettings()
-  document.addEventListener('selectionchange', queueGhostSync, true)
+  document.addEventListener('selectionchange', scheduleCompletion, true)
   document.addEventListener('scroll', queueGhostSync, true)
   window.addEventListener('resize', queueGhostSync, true)
 })
@@ -280,7 +282,7 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   debouncedRequest.cancel()
   void cancelActiveRequest()
-  document.removeEventListener('selectionchange', queueGhostSync, true)
+  document.removeEventListener('selectionchange', scheduleCompletion, true)
   document.removeEventListener('scroll', queueGhostSync, true)
   window.removeEventListener('resize', queueGhostSync, true)
   ghostOverlay.dispose()
@@ -291,7 +293,10 @@ const previewSuffix = computed(() => draft.value.slice(getCaretIndex()))
 const canRequest = computed(() => {
   if (!settings.value)
     return false
-  return previewPrefix.value.trim().length >= settings.value.minPrefixChars
+  return (
+    previewPrefix.value.trim().length >= settings.value.minPrefixChars
+    && supportsInlineCompletion(previewSuffix.value)
+  )
 })
 const blockedReason = computed(() => {
   if (!settings.value)
@@ -304,10 +309,29 @@ const blockedReason = computed(() => {
     return `Missing API key for ${providerPreset.value.name}.`
   }
   if (!canRequest.value) {
+    if (!supportsInlineCompletion(previewSuffix.value)) {
+      return 'Inline completion is currently only available at the end of the text.'
+    }
     return `Type at least ${settings.value.minPrefixChars} non-space characters to trigger completion.`
   }
   return ''
 })
+
+function logFlow(event: string, extra: Record<string, unknown> = {}) {
+  const payload = {
+    blockedReason: blockedReason.value,
+    hasSuggestion: suggestion.value.length > 0,
+    lastFingerprint: lastFingerprint.value,
+    lastRequestId: lastRequestId.value,
+    loading: loading.value,
+    prefixLength: previewPrefix.value.length,
+    suffixLength: previewSuffix.value.length,
+    ...extra,
+  }
+  console.debug('[copycat][flow]', event, payload)
+  const line = `${event} ${JSON.stringify(payload)}`
+  flowLogs.value = [line, ...flowLogs.value].slice(0, 40)
+}
 
 function getTextarea(): HTMLTextAreaElement | null {
   return document.getElementById('playground-input') as HTMLTextAreaElement | null
@@ -327,18 +351,21 @@ function queueGhostSync() {
 }
 
 function scheduleCompletion() {
+  logFlow('schedule-start')
   suggestion.value = ''
   errorText.value = ''
   infoText.value = ''
   lastLatencyMs.value = null
 
   if (blockedReason.value) {
+    logFlow('schedule-blocked')
     debouncedRequest.cancel()
     void cancelActiveRequest()
     lastFingerprint.value = ''
     queueGhostSync()
     return
   }
+  logFlow('schedule-debounced')
   queueGhostSync()
   debouncedRequest()
 }
@@ -348,8 +375,16 @@ async function requestCompletion() {
     return
   const prefix = previewPrefix.value
   const suffix = previewSuffix.value
-  if (prefix.trim().length < settings.value.minPrefixChars)
+  if (prefix.trim().length < settings.value.minPrefixChars) {
+    logFlow('request-skip-min-prefix', {
+      minPrefixChars: settings.value.minPrefixChars,
+    })
     return
+  }
+  if (!supportsInlineCompletion(suffix)) {
+    logFlow('request-skip-suffix')
+    return
+  }
 
   const fingerprint = buildCompletionFingerprint({
     host: 'playground',
@@ -357,8 +392,12 @@ async function requestCompletion() {
     prefix,
     suffix,
   })
-  if (fingerprint === lastFingerprint.value)
+  if (fingerprint === lastFingerprint.value) {
+    logFlow('request-skip-duplicate', {
+      fingerprint,
+    })
     return
+  }
 
   await cancelActiveRequest()
 
@@ -373,6 +412,10 @@ async function requestCompletion() {
   stageEnhancedTriggered.value = false
   stageEnhancedReplaced.value = false
   stageEnhancedRequested.value = false
+  logFlow('request-send-fast', {
+    fingerprint,
+    requestId: requestId,
+  })
 
   try {
     const response = await sendRuntimeMessage<CompletionResponse>({
@@ -386,18 +429,38 @@ async function requestCompletion() {
         debug: true,
       },
     })
-    if (lastRequestId.value !== requestId)
+    if (lastRequestId.value !== requestId) {
+      logFlow('request-drop-stale-fast', {
+        requestId,
+      })
       return
-    suggestion.value = getDisplayCompletion(response?.completion ?? '', previewSuffix.value)
+    }
+    if (!supportsInlineCompletion(previewSuffix.value)) {
+      logFlow('request-drop-suffix-blocked-fast', {
+        requestId,
+      })
+      return
+    }
+    logFlow('request-apply-fast', {
+      requestId,
+      suggestionLength: (response?.completion ?? '').length,
+    })
+    suggestion.value = response?.completion ?? ''
     stageFastCompletion.value = response?.completion ?? ''
     lastLatencyMs.value = response?.latencyMs ?? null
     assignDebugState(response.debug)
     queueGhostSync()
     if (!suggestion.value) {
+      logFlow('request-empty-fast', {
+        requestId,
+      })
       infoText.value
         = 'The request completed, but the model returned an empty completion for the current prefix.'
     }
     if (shouldRequestEnhancedStage(response) && lastRequestId.value === requestId) {
+      logFlow('request-send-enhanced', {
+        requestId,
+      })
       stageEnhancedRequested.value = true
       void requestEnhancedCompletion({
         currentSuggestion: response.completion,
@@ -409,6 +472,10 @@ async function requestCompletion() {
   catch (error) {
     if (lastRequestId.value !== requestId)
       return
+    logFlow('request-error-fast', {
+      message: error instanceof Error ? error.message : String(error),
+      requestId,
+    })
     errorText.value = error instanceof Error ? error.message : String(error)
     suggestion.value = ''
     clearDebugState()
@@ -446,18 +513,40 @@ async function requestEnhancedCompletion(args: {
       },
     })
 
-    if (lastRequestId.value !== requestId)
+    if (lastRequestId.value !== requestId) {
+      logFlow('request-drop-stale-enhanced', {
+        requestId,
+      })
       return
-    if (previewPrefix.value !== args.prefix)
+    }
+    if (previewPrefix.value !== args.prefix) {
+      logFlow('request-drop-prefix-changed-enhanced', {
+        requestId,
+      })
       return
+    }
     stageEnhancedTriggered.value = true
     stageEnhancedCompletion.value = response.completion
     const shouldReplace = shouldPreferEnhancedCompletion(args.currentSuggestion, response.completion)
     stageEnhancedReplaced.value = shouldReplace
-    if (!shouldReplace)
+    if (!shouldReplace) {
+      logFlow('request-drop-not-better-enhanced', {
+        requestId,
+      })
       return
+    }
+    if (!supportsInlineCompletion(previewSuffix.value)) {
+      logFlow('request-drop-suffix-blocked-enhanced', {
+        requestId,
+      })
+      return
+    }
 
-    suggestion.value = getDisplayCompletion(response.completion, previewSuffix.value)
+    logFlow('request-apply-enhanced', {
+      requestId,
+      suggestionLength: response.completion.length,
+    })
+    suggestion.value = response.completion
     lastLatencyMs.value = response.latencyMs
     assignDebugState(response.debug)
     queueGhostSync()
@@ -475,6 +564,9 @@ async function cancelActiveRequest() {
     return
   }
   const requestId = lastRequestId.value
+  logFlow('request-cancel', {
+    requestId,
+  })
   lastRequestId.value = ''
   loading.value = false
   try {
@@ -495,6 +587,9 @@ function acceptSuggestion() {
   const caret = getCaretIndex()
   const acceptedText = suggestion.value
   const acceptedPrefix = previewPrefix.value
+  logFlow('accept-suggestion', {
+    acceptedLength: acceptedText.length,
+  })
   const nextValue
     = draft.value.slice(0, caret) + acceptedText + draft.value.slice(caret)
   draft.value = nextValue
@@ -522,11 +617,13 @@ function acceptSuggestion() {
 function handleKeydown(event: KeyboardEvent) {
   if (event.key === 'Tab' && suggestion.value) {
     event.preventDefault()
+    logFlow('keydown-tab-accept')
     acceptSuggestion()
     return
   }
   if (event.key === 'Escape' && suggestion.value) {
     event.preventDefault()
+    logFlow('keydown-escape-dismiss')
     emitCompletionEvent({
       action: 'rejected',
       prefix: previewPrefix.value,
@@ -586,8 +683,28 @@ function clearAll() {
   lastRequestId.value = ''
   lastLatencyMs.value = null
   lastFingerprint.value = ''
+  flowLogs.value = []
+  flowLogsCopied.value = false
   debouncedRequest.cancel()
   queueGhostSync()
+}
+
+async function copyFlowLogs() {
+  const text = flowLogs.value.join('\n')
+  if (!text) {
+    return
+  }
+
+  try {
+    await navigator.clipboard.writeText(text)
+    flowLogsCopied.value = true
+    window.setTimeout(() => {
+      flowLogsCopied.value = false
+    }, 1500)
+  }
+  catch (error) {
+    console.warn('[copycat] failed to copy flow logs', error)
+  }
 }
 
 function assignDebugState(debug: CompletionResponse['debug']) {
@@ -838,6 +955,25 @@ function openOptions() {
                 <dd class="mt-1 text-neutral-800">{{ value }}</dd>
               </div>
             </dl>
+          </div>
+
+          <div class="card">
+            <div class="mb-4 flex items-center justify-between gap-3">
+              <h2 class="text-base font-semibold">Flow log</h2>
+              <div class="flex items-center gap-3">
+                <span class="text-xs text-neutral-500">latest 40 events</span>
+                <button
+                  class="btn-ghost px-3 py-1 text-xs"
+                  :disabled="flowLogs.length === 0"
+                  @click="copyFlowLogs"
+                >
+                  {{ flowLogsCopied ? 'Copied' : 'Copy' }}
+                </button>
+              </div>
+            </div>
+            <div class="rounded-lg bg-neutral-950 p-3">
+              <pre class="max-h-80 overflow-auto whitespace-pre-wrap break-all text-xs text-neutral-100">{{ flowLogs.length ? flowLogs.join('\n') : 'No flow events yet.' }}</pre>
+            </div>
           </div>
 
           <div class="grid gap-4 sm:grid-cols-2">

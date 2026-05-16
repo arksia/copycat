@@ -31,7 +31,6 @@ export class GhostTextOverlay {
   private contentNode: HTMLDivElement
   private prefixNode: HTMLSpanElement
   private suggestionNode: HTMLSpanElement
-  private suffixNode: HTMLSpanElement
   private hintNode: HTMLSpanElement
   private installed = false
 
@@ -65,10 +64,6 @@ export class GhostTextOverlay {
     this.suggestionNode.setAttribute('data-copycat-ghost-suggestion', '')
     this.suggestionNode.style.color = 'rgba(115, 115, 115, 0.72)'
 
-    this.suffixNode = document.createElement('span')
-    this.suffixNode.setAttribute('data-copycat-ghost-suffix', '')
-    this.suffixNode.style.visibility = 'hidden'
-
     this.hintNode = document.createElement('span')
     Object.assign(this.hintNode.style, {
       position: 'absolute',
@@ -84,7 +79,7 @@ export class GhostTextOverlay {
     } satisfies Partial<CSSStyleDeclaration>)
     this.hintNode.textContent = 'Tab'
 
-    this.contentNode.append(this.prefixNode, this.suggestionNode, this.suffixNode)
+    this.contentNode.append(this.prefixNode, this.suggestionNode)
     this.host.append(this.contentNode, this.hintNode)
   }
 
@@ -114,7 +109,6 @@ export class GhostTextOverlay {
     this.host.style.display = 'none'
     this.prefixNode.textContent = ''
     this.suggestionNode.textContent = ''
-    this.suffixNode.textContent = ''
   }
 
   dispose() {
@@ -159,7 +153,6 @@ export class GhostTextOverlay {
 
     this.prefixNode.textContent = editor.getPrefix()
     this.suggestionNode.textContent = suggestion
-    this.suffixNode.textContent = editor.getSuffix()
     this.hintNode.style.display = 'inline-block'
   }
 
@@ -188,7 +181,6 @@ export class GhostTextOverlay {
 
     this.prefixNode.textContent = ''
     this.suggestionNode.textContent = suggestion
-    this.suffixNode.textContent = ''
     this.hintNode.style.display = 'inline-block'
   }
 

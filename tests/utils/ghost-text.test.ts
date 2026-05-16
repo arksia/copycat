@@ -49,9 +49,6 @@ describe('ghostTextOverlay', () => {
     const suggestion = host?.querySelector(
       '[data-copycat-ghost-suggestion]',
     ) as HTMLElement | null
-    const suffix = host?.querySelector(
-      '[data-copycat-ghost-suffix]',
-    ) as HTMLElement | null
 
     expect(host?.style.top).toBe('100px')
     expect(host?.style.left).toBe('20px')
@@ -60,42 +57,6 @@ describe('ghostTextOverlay', () => {
     expect(content?.style.whiteSpace).toBe('pre-wrap')
     expect(prefix?.style.visibility).toBe('hidden')
     expect(suggestion?.textContent).toBe('\nworld')
-    expect(suffix?.style.visibility).toBe('hidden')
-    expect(suffix?.textContent).toBe('')
-  })
-
-  it('keeps the existing suffix in the mirror so later text starts after the ghost text', () => {
-    const editor = document.createElement('textarea')
-    editor.value = 'hello world'
-    document.body.appendChild(editor)
-
-    Object.defineProperty(editor, 'clientWidth', { configurable: true, value: 198 })
-    Object.defineProperty(editor, 'clientHeight', { configurable: true, value: 78 })
-    editor.getBoundingClientRect = () => new DOMRect(20, 100, 200, 80)
-
-    const handle: EditorHandle = {
-      kind: 'textarea',
-      el: editor,
-      getPrefix: () => 'hello',
-      getSuffix: () => ' world',
-      getCaretRect: () => new DOMRect(52, 108, 0, 24),
-      insertAtCaret: () => {},
-      focus: () => {},
-      isEmpty: () => false,
-    }
-
-    const overlay = new GhostTextOverlay()
-    overlay.show(handle, ' brave new')
-
-    const content = document.documentElement.querySelector<HTMLElement>(
-      '[data-copycat-ghost-content]',
-    )
-    const suffix = document.documentElement.querySelector<HTMLElement>(
-      '[data-copycat-ghost-suffix]',
-    )
-
-    expect(suffix?.textContent).toBe(' world')
-    expect(content?.textContent).toBe('hello brave new world')
   })
 
   it('falls back to caret-anchored rendering for non-native editors', () => {
