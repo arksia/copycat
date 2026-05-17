@@ -255,4 +255,35 @@ describe('reduceCompletionState', () => {
       },
     ])
   })
+
+  it('clears the scheduled session without telemetry when a request is suppressed locally', () => {
+    const state = buildState({
+      mode: 'scheduled',
+      snapshot: buildSnapshot(),
+      session: {
+        fingerprint: 'fp-1',
+        latencyMs: null,
+        originalSuggestion: '',
+        requestId: null,
+        sessionId: 'sess_1',
+        snapshotRevision: 1,
+        stage: 'fast',
+        suggestion: '',
+      },
+    })
+
+    const result = reduceCompletionState(state, {
+      sessionId: 'sess_1',
+      type: 'REQUEST_SUPPRESSED',
+    })
+
+    expect(result.state.mode).toBe('idle')
+    expect(result.state.session).toBeNull()
+    expect(result.effects).toEqual([
+      {
+        sessionId: 'sess_1',
+        type: 'CLEAR_SUGGESTION',
+      },
+    ])
+  })
 })

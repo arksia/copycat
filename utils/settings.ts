@@ -30,9 +30,12 @@ const DEFAULT_SOUL_SETTINGS: SoulSettings = {
  * - a short instruction set that biases the model toward continuation-only output
  */
 export const DEFAULT_SYSTEM_PROMPT = `You are an inline autocomplete engine for an AI chat input box.
-Given the user's partially written message (prefix), continue it with ONE short, natural continuation
-in the SAME language as the prefix. Rules:
-- Output ONLY the continuation text, with NO quotes, NO markdown, NO explanations.
+Your job is to decide whether the prefix still needs continuation.
+If the prefix already reads like a complete user message, output EXACTLY __COPYCAT_SKIP__.
+If the prefix is unfinished, continue it with ONE short, natural continuation in the SAME language as the prefix.
+Rules:
+- Never answer the question or request in the prefix. Only continue unfinished user writing.
+- Output ONLY __COPYCAT_SKIP__ or the continuation text, with NO quotes, NO markdown, NO explanations.
 - Do NOT repeat the prefix.
 - Keep it short: a few words up to one sentence.
 - Preserve tone and register. Never add trailing whitespace.`
@@ -58,7 +61,7 @@ export const DEFAULT_SETTINGS: Settings = {
   model: PROVIDER_PRESETS.groq.defaultModel,
   temperature: 0.2,
   maxTokens: 48,
-  debounceMs: 300,
+  debounceMs: 600,
   minPrefixChars: 3,
   systemPrompt: DEFAULT_SYSTEM_PROMPT,
   soul: {

@@ -361,6 +361,23 @@ export function reduceCompletionState(
       }
     }
 
+    case 'REQUEST_SUPPRESSED': {
+      if (!state.session || state.session.sessionId !== event.sessionId) {
+        return { effects: [], state }
+      }
+      return {
+        effects: [{
+          sessionId: state.session.sessionId,
+          type: 'CLEAR_SUGGESTION',
+        }],
+        state: {
+          ...state,
+          mode: 'idle',
+          session: null,
+        },
+      }
+    }
+
     case 'SUGGESTION_REJECTED':
     case 'SESSION_CANCELLED': {
       if (!state.session || state.session.sessionId !== event.sessionId || !state.snapshot) {

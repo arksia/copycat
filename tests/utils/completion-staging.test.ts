@@ -11,6 +11,7 @@ function buildResponse(partial: Partial<CompletionResponse>): CompletionResponse
   return {
     id: 'req-1',
     completion: '',
+    skipped: false,
     latencyMs: 0,
     provider: 'custom',
     model: 'test-model',

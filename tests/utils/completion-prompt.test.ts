@@ -167,4 +167,12 @@ describe('buildCompletionUserPrompt', () => {
       `[Soul]\n${soulContext}\n\n[Knowledge]\n[Copycat Notes]\n支持知识库召回\n\n[Prefix]\n我想开发一个博客系统`,
     )
   })
+
+  it('tells the model to emit the skip sentinel for complete prefixes', () => {
+    expect(buildCompletionUserPrompt({
+      prefix: '你觉得这个方案怎么样？',
+    })).toContain(
+      'If it is already complete, output EXACTLY __COPYCAT_SKIP__.',
+    )
+  })
 })

@@ -11,6 +11,10 @@ import type {
   CompletionState,
 } from '~/utils/completion/state'
 import { buildCompletionFingerprint, buildCompletionSignalKey } from '~/utils/completion/request'
+import {
+  createCompletionTriggerMemory,
+  evaluateCompletionTrigger,
+} from '~/utils/completion/trigger'
 import { CompletionController } from '~/utils/completion/controller'
 import { supportsInlineCompletion } from '~/utils/completion/position'
 import { debounce, nextId } from '~/utils/core/base'
@@ -48,6 +52,7 @@ class CopycatFlowController {
   private activeEditor: EditorHandle | null = null
   private snapshotRevision = 0
   private debounceHandles = new Map<string, ReturnType<typeof debounce<() => void>>>()
+  private triggerMemory = createCompletionTriggerMemory()
   private controller = new CompletionController({
     onEffects: (effects, state) => {
       void this.applyEffects(effects, state)
@@ -294,7 +299,27 @@ class CopycatFlowController {
           if (!state.snapshot || !state.session || state.session.sessionId !== effect.sessionId) {
             break
           }
+          if (effect.stage === 'fast') {
+            const triggerDecision = evaluateCompletionTrigger({
+              prefix: state.snapshot.prefix,
+              now: Date.now(),
+              memory: this.triggerMemory,
+            })
+            if (!triggerDecision.allowed) {
+              this.logDebug('request-skipped-trigger-policy', {
+                reason: triggerDecision.reason,
+              })
+              this.controller.dispatch({
+                sessionId: effect.sessionId,
+                type: 'REQUEST_SUPPRESSED',
+              })
+              break
+            }
+          }
           const requestId = nextId('req')
+          if (effect.stage === 'fast') {
+            this.triggerMemory.lastRequestedPrefix = state.snapshot.prefix
+          }
           this.controller.dispatch({
             requestId,
             sessionId: effect.sessionId,
@@ -330,6 +355,10 @@ class CopycatFlowController {
                   suggestion: res.completion,
                   type: 'ENHANCED_REQUEST_RESOLVED',
                 })
+            if (res.skipped) {
+              this.triggerMemory.lastSkipPrefix = state.snapshot.prefix
+              this.triggerMemory.lastSkipAt = Date.now()
+            }
           }
           catch {
             this.controller.dispatch({

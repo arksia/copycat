@@ -120,6 +120,7 @@ export interface CompletionRequest {
 export interface CompletionDebugInfo {
   rawCompletion: string
   sanitizedCompletion: string
+  skipReason?: 'empty' | 'sentinel' | 'whitespace'
   rawChoice: string
   cacheHit: boolean
   appliedStrategy?: {
@@ -236,6 +237,7 @@ export interface CompletionDebugInfo {
 export interface CompletionResponse {
   id: string
   completion: string
+  skipped: boolean
   latencyMs: number
   provider: ProviderId
   model: string

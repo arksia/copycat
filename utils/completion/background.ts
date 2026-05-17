@@ -124,6 +124,7 @@ export function createBackgroundCompletionService(args: {
       return {
         id: req.id,
         completion: cached,
+        skipped: false,
         latencyMs: 0,
         provider: settings.provider,
         model: settings.model,
@@ -138,6 +139,7 @@ export function createBackgroundCompletionService(args: {
         return {
           id: req.id,
           completion: persisted,
+          skipped: false,
           latencyMs: 0,
           provider: settings.provider,
           model: settings.model,
@@ -171,6 +173,7 @@ export function createBackgroundCompletionService(args: {
               settings,
               signal: controller.signal,
             }),
+            skipped: false,
             debug: undefined,
           }
       const completion = detailed.completion
@@ -210,15 +213,16 @@ export function createBackgroundCompletionService(args: {
       return {
         id: req.id,
         completion,
+        skipped: detailed.skipped,
         latencyMs: llmMs,
         provider: settings.provider,
         model: settings.model,
         stage: requestStage,
-        shouldRunEnhancedStage,
+        shouldRunEnhancedStage: shouldRunEnhancedStage && !detailed.skipped,
         debug: buildCompletionDebugInfo(detailed.debug, {
           appliedStrategy: {
             requestStage,
-            shouldRunEnhancedStage,
+            shouldRunEnhancedStage: shouldRunEnhancedStage && !detailed.skipped,
             telemetryWindowSize: args.telemetryWindowSize,
             knowledgeBudget,
           },
@@ -315,6 +319,7 @@ function emptyResponse(
   return {
     id,
     completion: '',
+    skipped: false,
     latencyMs: 0,
     provider,
     model,

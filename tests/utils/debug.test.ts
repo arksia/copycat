@@ -407,4 +407,42 @@ describe('buildCompletionDebugInfo', () => {
       },
     })
   })
+
+  it('preserves the completion skip reason from the base debug payload', () => {
+    const baseDebug: CompletionDebugInfo = {
+      rawCompletion: '__COPYCAT_SKIP__',
+      sanitizedCompletion: '',
+      skipReason: 'sentinel',
+      rawChoice: '{}',
+      cacheHit: false,
+      requestBody: {
+        systemPrompt: 'system',
+        userPrompt: 'user',
+      },
+    }
+
+    expect(buildCompletionDebugInfo(baseDebug, {
+      appliedStrategy: {
+        requestStage: 'fast',
+        shouldRunEnhancedStage: false,
+        telemetryWindowSize: 20,
+        knowledgeBudget: {
+          topK: 2,
+          maxChars: 900,
+        },
+      },
+      timings: {
+        totalMs: 8,
+        settingsMs: 1,
+        telemetryMs: 0,
+        knowledgeMs: 0,
+        llmMs: 7,
+      },
+      knowledgeResolution: {
+        chunks: [],
+      },
+    })).toMatchObject({
+      skipReason: 'sentinel',
+    })
+  })
 })

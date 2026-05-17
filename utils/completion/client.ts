@@ -6,6 +6,8 @@ import {
 import { buildSoulProjection } from '~/soul'
 import { buildCompletionUserPrompt } from './prompt'
 
+export const COMPLETION_SKIP_SENTINEL = '__COPYCAT_SKIP__'
+
 /**
  * Arguments for a single inline completion request.
  *
@@ -42,6 +44,7 @@ export interface CompleteArgs {
  */
 export interface CompleteResult {
   completion: string
+  skipped: boolean
   debug: CompletionDebugInfo
 }
 
@@ -138,13 +141,15 @@ export async function completeOnceDetailed({
   const json = (await res.json()) as { choices?: ChatChoice[] }
   const choice = json.choices?.[0]
   const rawCompletion = extractRawCompletion(choice)
-  const completion = rawCompletion
+  const normalized = normalizeCompletion(rawCompletion)
 
   return {
-    completion,
+    completion: normalized.completion,
+    skipped: normalized.skipped,
     debug: {
       rawCompletion,
-      sanitizedCompletion: completion,
+      sanitizedCompletion: normalized.completion,
+      skipReason: normalized.skipReason,
       rawChoice: safeStringify(choice ?? null),
       cacheHit: false,
       soulContext,
@@ -215,4 +220,33 @@ function truncate(s: string, n: number): string {
  */
 export function extractRawCompletion(choice?: ChatChoice): string {
   return choice?.message?.content ?? choice?.delta?.content ?? ''
+}
+
+export function normalizeCompletion(rawCompletion: string): {
+  completion: string
+  skipped: boolean
+  skipReason?: CompletionDebugInfo['skipReason']
+} {
+  const trimmedCompletion = rawCompletion.trim()
+
+  if (trimmedCompletion === COMPLETION_SKIP_SENTINEL) {
+    return {
+      completion: '',
+      skipped: true,
+      skipReason: 'sentinel',
+    }
+  }
+
+  if (trimmedCompletion.length === 0) {
+    return {
+      completion: '',
+      skipped: true,
+      skipReason: rawCompletion.length === 0 ? 'empty' : 'whitespace',
+    }
+  }
+
+  return {
+    completion: rawCompletion,
+    skipped: false,
+  }
 }

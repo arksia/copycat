@@ -40,8 +40,10 @@ export function buildCompletionUserPrompt(args: {
   }
 
   userParts.push(
-    `[Prefix]\n${args.prefix}\n\n[Task]\nContinue the prefix with a short, natural continuation. `
-    + `Output ONLY the continuation text, without repeating the prefix.`,
+    `[Prefix]\n${args.prefix}\n\n[Task]\nDecide whether the prefix still needs continuation. `
+    + `If it is already complete, output EXACTLY __COPYCAT_SKIP__. `
+    + `If it is unfinished, continue it with a short, natural continuation. `
+    + `Output ONLY __COPYCAT_SKIP__ or the continuation text, without repeating the prefix.`,
   )
 
   if (args.suffix !== undefined && args.suffix.trim().length > 0) {

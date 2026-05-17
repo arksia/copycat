@@ -6,6 +6,10 @@ import {
   buildCompletionSignalKey,
 } from '~/utils/completion/request'
 import { supportsInlineCompletion } from '~/utils/completion/position'
+import {
+  createCompletionTriggerMemory,
+  evaluateCompletionTrigger,
+} from '~/utils/completion/trigger'
 import { debounce, nextId } from '~/utils/core/base'
 import { openSettingsPage, sendRuntimeMessage } from '~/utils/runtime'
 import { GhostTextOverlay, syncPlaygroundGhostText } from '~/integrations/overlay/ghost-text'
@@ -69,6 +73,7 @@ const settings = ref<Settings | null>(null)
 const lastFingerprint = ref('')
 const flowLogs = ref<string[]>([])
 const flowLogsCopied = ref(false)
+const triggerMemory = createCompletionTriggerMemory()
 const completionMode = computed(() => {
   if (loading.value)
     return 'Requesting'
@@ -398,10 +403,22 @@ async function requestCompletion() {
     })
     return
   }
+  const triggerDecision = evaluateCompletionTrigger({
+    prefix,
+    now: Date.now(),
+    memory: triggerMemory,
+  })
+  if (!triggerDecision.allowed) {
+    logFlow('request-skip-trigger-policy', {
+      reason: triggerDecision.reason,
+    })
+    return
+  }
 
   await cancelActiveRequest()
 
   const requestId = nextId('play')
+  triggerMemory.lastRequestedPrefix = prefix
   lastRequestId.value = requestId
   lastFingerprint.value = fingerprint
   loading.value = true
@@ -444,18 +461,25 @@ async function requestCompletion() {
     logFlow('request-apply-fast', {
       requestId,
       suggestionLength: (response?.completion ?? '').length,
+      skipped: response.skipped,
     })
     suggestion.value = response?.completion ?? ''
+    if (response.skipped) {
+      triggerMemory.lastSkipPrefix = prefix
+      triggerMemory.lastSkipAt = Date.now()
+    }
     stageFastCompletion.value = response?.completion ?? ''
     lastLatencyMs.value = response?.latencyMs ?? null
     assignDebugState(response.debug)
     queueGhostSync()
     if (!suggestion.value) {
-      logFlow('request-empty-fast', {
+      logFlow(response.skipped ? 'request-skip-fast' : 'request-empty-fast', {
         requestId,
       })
       infoText.value
-        = 'The request completed, but the model returned an empty completion for the current prefix.'
+        = response.skipped
+          ? 'The model decided the current prefix does not need inline continuation yet.'
+          : 'The request completed, but the model returned an empty completion for the current prefix.'
     }
     if (shouldRequestEnhancedStage(response) && lastRequestId.value === requestId) {
       logFlow('request-send-enhanced', {

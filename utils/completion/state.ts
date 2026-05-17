@@ -96,6 +96,10 @@ export type CompletionEvent
       sessionId: string
       type: 'SESSION_CANCELLED'
     }
+    | {
+      sessionId: string
+      type: 'REQUEST_SUPPRESSED'
+    }
 
 export type CompletionEffect
   = | {

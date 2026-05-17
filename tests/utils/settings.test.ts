@@ -43,6 +43,11 @@ afterEach(() => {
 })
 
 describe('hostMatches', () => {
+  it('ships a system prompt that can explicitly skip complete prefixes', () => {
+    expect(DEFAULT_SETTINGS.systemPrompt).toContain('output EXACTLY __COPYCAT_SKIP__')
+    expect(DEFAULT_SETTINGS.systemPrompt).toContain('Never answer the question or request in the prefix.')
+  })
+
   it('matches exact hosts and subdomains', () => {
     expect(hostMatches('https://chatgpt.com', 'chatgpt.com')).toBe(true)
     expect(hostMatches('https://foo.chatgpt.com', 'chatgpt.com')).toBe(true)
