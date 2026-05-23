@@ -3,7 +3,6 @@ import {
   buildOpenAICompatibleHeaders,
   joinOpenAICompatibleUrl,
 } from '~/utils/providers/openai-compatible'
-import { buildSoulProjection } from '~/soul'
 import { buildCompletionUserPrompt } from './prompt'
 
 export const COMPLETION_SKIP_SENTINEL = '__COPYCAT_SKIP__'
@@ -26,6 +25,7 @@ export interface CompleteArgs {
   prefix: string
   suffix?: string
   context?: string
+  soulContext?: string
   settings: Settings
   signal?: AbortSignal
 }
@@ -106,12 +106,11 @@ export async function completeOnceDetailed({
   prefix,
   suffix,
   context,
+  soulContext,
   settings,
   signal,
 }: CompleteArgs): Promise<CompleteResult> {
   const url = joinOpenAICompatibleUrl(settings.baseUrl, '/chat/completions')
-  const soulProjection = buildSoulProjection(settings.soul)
-  const soulContext = soulProjection.context
   const userPrompt = buildCompletionUserPrompt({
     prefix,
     suffix,
@@ -152,11 +151,6 @@ export async function completeOnceDetailed({
       skipReason: normalized.skipReason,
       rawChoice: safeStringify(choice ?? null),
       cacheHit: false,
-      soulContext,
-      soulEnabled: soulContext.length > 0,
-      soulConfigured: settings.soul.enabled,
-      soulCharCount: soulContext.length,
-      soulBudget: soulProjection.meta,
       requestBody: {
         systemPrompt: settings.systemPrompt,
         userPrompt,

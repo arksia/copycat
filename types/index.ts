@@ -9,6 +9,19 @@ export interface SoulProfile {
   notes: string
 }
 
+export interface LearnedSoulProfile {
+  preferences: string[]
+  avoidances: string[]
+  terms: string[]
+}
+
+export interface DistilledSoulCue {
+  kind: 'preference' | 'avoidance' | 'term'
+  value: string
+  sourceSignalIds: string[]
+  confidence: number
+}
+
 export interface SoulSettings {
   enabled: boolean
   profile: SoulProfile
@@ -63,6 +76,12 @@ export interface SoulObservedSignalSnapshot {
   totalCount: number
   matureCount: number
   signals: SoulObservedSignal[]
+}
+
+export interface SoulProjectionInput {
+  enabled: boolean
+  explicit: SoulProfile
+  learned?: LearnedSoulProfile
 }
 
 export interface SettingsPatch extends Partial<Omit<Settings, 'soul'>> {
@@ -183,6 +202,10 @@ export interface CompletionDebugInfo {
     }>
   }
   soulContext?: string
+  soulExplicitContext?: string
+  soulLearnedContext?: string
+  soulLearnedProfile?: LearnedSoulProfile
+  soulObservedSignalCount?: number
   soulEnabled?: boolean
   soulConfigured?: boolean
   soulCharCount?: number

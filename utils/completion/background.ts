@@ -2,7 +2,9 @@ import type {
   CompletionDebugInfo,
   CompletionRequest,
   CompletionResponse,
+  LearnedSoulProfile,
   KnowledgeChunkEmbedding,
+  SoulProfile,
 } from '~/types'
 import {
   buildCompletionCacheKey,
@@ -15,7 +17,12 @@ import { deriveCompletionQualitySignal } from './telemetry'
 import { getPersistedCompletion, putPersistedCompletion } from '~/utils/storage/repositories/completions'
 import { getCompletionEventStats } from '~/utils/storage/repositories/events'
 import { loadSettings } from '~/utils/settings'
-import { buildSoulProjection, getSoulObservedSignalSnapshot } from '~/soul'
+import {
+  buildSoulProjection,
+  distillSoulSignals,
+  getSoulObservedSignalSnapshot,
+  listMatureSoulObservedSignals,
+} from '~/soul'
 import {
   mergeCompletionContext,
   resolveCompletionKnowledge,
@@ -79,7 +86,11 @@ export function createBackgroundCompletionService(args: {
       = telemetryHost !== null && telemetryHost.length > 0
         ? await getCompletionEventStats(telemetryHost, args.telemetryWindowSize)
         : null
-    const soulSignals = req.debug
+    const matureSoulSignals = settings.soul.enabled
+      ? await listMatureSoulObservedSignals(8)
+      : []
+    const distilledSoul = distillSoulSignals(matureSoulSignals)
+    const soulSignals = req.debug && settings.soul.enabled
       ? await getSoulObservedSignalSnapshot({
           limit: 8,
           matureOnly: true,
@@ -109,7 +120,11 @@ export function createBackgroundCompletionService(args: {
     })
     const knowledgeMs = Math.round(performance.now() - knowledgeStart)
     const completionContext = mergeCompletionContext(req.context, knowledgeResolution.context)
-    const soulProjection = buildSoulProjection(settings.soul)
+    const soulProjection = resolveRuntimeSoulProjection({
+      enabled: settings.soul.enabled,
+      explicitProfile: settings.soul.profile,
+      learnedProfile: distilledSoul.profile,
+    })
     const soulContext = soulProjection.context
     const cacheKey = buildCompletionCacheKey({
       provider: settings.provider,
@@ -162,6 +177,7 @@ export function createBackgroundCompletionService(args: {
             prefix: req.prefix,
             suffix: req.suffix,
             context: completionContext,
+            soulContext,
             settings,
             signal: controller.signal,
           })
@@ -170,6 +186,7 @@ export function createBackgroundCompletionService(args: {
               prefix: req.prefix,
               suffix: req.suffix,
               context: completionContext,
+              soulContext,
               settings,
               signal: controller.signal,
             }),
@@ -232,6 +249,17 @@ export function createBackgroundCompletionService(args: {
             context: soulContext,
             enabled: settings.soul.enabled,
             budget: soulProjection.meta,
+            explicitContext: buildSoulProjection({
+              enabled: settings.soul.enabled,
+              explicit: settings.soul.profile,
+            }).context,
+            learnedContext: buildSoulProjection({
+              enabled: settings.soul.enabled,
+              explicit: emptyExplicitSoulProfile(),
+              learned: distilledSoul.profile,
+            }).context,
+            learnedProfile: distilledSoul.profile,
+            observedSignalCount: matureSoulSignals.length,
           },
           soulSignals: soulSignals === undefined
             ? undefined
@@ -307,6 +335,29 @@ export function createBackgroundCompletionService(args: {
     cancel,
     cancelBySignalKey,
     handleCompletion,
+  }
+}
+
+function resolveRuntimeSoulProjection(args: {
+  enabled: boolean
+  explicitProfile: SoulProfile
+  learnedProfile: LearnedSoulProfile
+}) {
+  return buildSoulProjection({
+    enabled: args.enabled,
+    explicit: args.explicitProfile,
+    learned: args.learnedProfile,
+  })
+}
+
+function emptyExplicitSoulProfile() {
+  return {
+    identity: '',
+    style: '',
+    preferences: '',
+    avoidances: '',
+    terms: '',
+    notes: '',
   }
 }
 

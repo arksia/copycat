@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { deriveSoulObservedSignals } from '~/soul'
+import { buildSoulSignalEvidence, deriveSoulObservedSignals } from '~/soul'
 
 describe('deriveSoulObservedSignals', () => {
   it('extracts direct answer-first preference tags from accepted completions', () => {
@@ -18,6 +18,7 @@ describe('deriveSoulObservedSignals', () => {
     expect(tags.map(tag => `${tag.kind}:${tag.value}`)).toEqual([
       'structure:answer-first',
       'preference:prefer-direct-tone',
+      'term:term:结论',
     ])
   })
 
@@ -54,5 +55,19 @@ describe('deriveSoulObservedSignals', () => {
 
     expect(tags.map(tag => `${tag.kind}:${tag.value}`)).toContain('term:term:rag')
     expect(tags.map(tag => `${tag.kind}:${tag.value}`)).toContain('term:term:retrieval')
+  })
+
+  it('extracts repeated han terms shared by prefix and suggestion', () => {
+    const evidence = buildSoulSignalEvidence({
+      id: 'evt-4',
+      prefix: '请解释知识召回和虚拟列表取舍',
+      suggestion: '知识召回应该保持本地，虚拟列表适合大数据集。',
+      action: 'accepted',
+      latencyMs: 90,
+      timestamp: 400,
+      host: 'chatgpt.com',
+    })
+
+    expect(evidence.termHits).toEqual(expect.arrayContaining(['知识召回', '虚拟列表']))
   })
 })

@@ -1,17 +1,15 @@
-import type { Settings, SoulBudgetMeta, SoulProfile } from '~/types'
+import type {
+  LearnedSoulProfile,
+  SoulBudgetMeta,
+  SoulProjectionInput,
+} from '~/types'
+import { buildLearnedSoulBlocks } from './distill'
+import { buildExplicitSoulBlocks, type SoulBlock } from './profile'
 
 const BLOCK_SEPARATOR = '\n\n'
 const LIST_ITEM_PREFIX = '- '
 const SOUL_CHAR_BUDGET = 1200
 const TRUNCATION_SUFFIX = '...'
-
-interface SoulBlock {
-  label: string
-  kind: 'text' | 'list'
-  values: string[]
-  outputOrder: number
-  inclusionPriority: number
-}
 
 export interface SoulProjection {
   context: string
@@ -19,7 +17,7 @@ export interface SoulProjection {
 }
 
 /**
- * Projects a Soul profile into a structured prompt fragment.
+ * Projects explicit and learned Soul profiles into one structured prompt fragment.
  *
  * Before:
  * - `{ identity: "工程师", style: "", preferences: "先给结论", avoidances: "", terms: "", notes: "" }`
@@ -27,8 +25,8 @@ export interface SoulProjection {
  * After:
  * - `[Role Context]\n工程师\n\n[Writing Preferences]\n- 先给结论`
  */
-export function buildSoulContext(soul: Settings['soul']): string {
-  return buildSoulProjection(soul).context
+export function buildSoulContext(input: SoulProjectionInput): string {
+  return buildSoulProjection(input).context
 }
 
 /**
@@ -41,12 +39,15 @@ export function buildSoulContext(soul: Settings['soul']): string {
  * Returns:
  * - the rendered Soul context plus packing metadata
  */
-export function buildSoulProjection(soul: Settings['soul']): SoulProjection {
-  if (!soul.enabled) {
+export function buildSoulProjection(input: SoulProjectionInput): SoulProjection {
+  if (!input.enabled) {
     return buildEmptySoulProjection()
   }
 
-  const blocks = buildSoulBlocks(soul.profile)
+  const blocks = mergeSoulBlocks(
+    buildExplicitSoulBlocks(input.explicit),
+    buildLearnedSoulBlocks(input.learned ?? buildEmptyLearnedSoulProfile()),
+  )
   if (blocks.length === 0) {
     return buildEmptySoulProjection()
   }
@@ -100,93 +101,6 @@ export function buildSoulProjection(soul: Settings['soul']): SoulProjection {
   }
 }
 
-function buildSoulBlocks(profile: SoulProfile): SoulBlock[] {
-  const blocks: SoulBlock[] = []
-  const writingPreferences = compactLines([
-    profile.style,
-    profile.preferences,
-  ])
-
-  pushSoulTextBlock(blocks, {
-    label: 'Role Context',
-    outputOrder: 0,
-    inclusionPriority: 0,
-    value: profile.identity,
-  })
-  pushSoulListBlock(blocks, {
-    label: 'Writing Preferences',
-    outputOrder: 1,
-    inclusionPriority: 2,
-    values: writingPreferences,
-  })
-  pushSoulListBlock(blocks, {
-    label: 'Hard Constraints',
-    outputOrder: 2,
-    inclusionPriority: 1,
-    values: compactLines([profile.avoidances]),
-  })
-  pushSoulListBlock(blocks, {
-    label: 'Preferred Terms',
-    outputOrder: 3,
-    inclusionPriority: 3,
-    values: compactLines([profile.terms]),
-  })
-  pushSoulTextBlock(blocks, {
-    label: 'Additional Notes',
-    outputOrder: 4,
-    inclusionPriority: 4,
-    value: profile.notes,
-  })
-
-  return blocks
-}
-
-function pushSoulTextBlock(target: SoulBlock[], options: {
-  label: string
-  outputOrder: number
-  inclusionPriority: number
-  value: string
-}) {
-  const values = compactLines([options.value])
-  if (values.length === 0) {
-    return
-  }
-
-  target.push({
-    label: options.label,
-    kind: 'text',
-    values,
-    outputOrder: options.outputOrder,
-    inclusionPriority: options.inclusionPriority,
-  })
-}
-
-function pushSoulListBlock(target: SoulBlock[], options: {
-  label: string
-  outputOrder: number
-  inclusionPriority: number
-  values: string[]
-}) {
-  if (options.values.length === 0) {
-    return
-  }
-
-  target.push({
-    label: options.label,
-    kind: 'list',
-    values: options.values,
-    outputOrder: options.outputOrder,
-    inclusionPriority: options.inclusionPriority,
-  })
-}
-
-function compactLines(values: string[]): string[] {
-  return values
-    .flatMap(value => value.split(/\r?\n/))
-    .map(value => value.trim())
-    .filter(Boolean)
-}
-
 function buildApplicationRulesBlock(): SoulBlock {
   return {
     label: 'Application Rules',
@@ -199,6 +113,10 @@ function buildApplicationRulesBlock(): SoulBlock {
     outputOrder: 5,
     inclusionPriority: 5,
   }
+}
+
+function mergeSoulBlocks(explicitBlocks: SoulBlock[], learnedBlocks: SoulBlock[]): SoulBlock[] {
+  return [...explicitBlocks, ...learnedBlocks]
 }
 
 function fitSoulBlocksWithinBudget(blocks: SoulBlock[], budget: number): {
@@ -375,6 +293,14 @@ function buildEmptySoulProjection(): SoulProjection {
       droppedBlocks: [],
       trimmedBlocks: [],
     },
+  }
+}
+
+function buildEmptyLearnedSoulProfile(): LearnedSoulProfile {
+  return {
+    preferences: [],
+    avoidances: [],
+    terms: [],
   }
 }
 

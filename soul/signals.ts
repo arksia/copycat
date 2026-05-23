@@ -95,14 +95,14 @@ export function buildSoulSignalEvidence(event: CompletionEvent): SoulObservedSig
     suggestionLengthBucket: classifySuggestionLength(event.suggestion),
     openingStructure: detectOpeningStructure(event.suggestion),
     toneHints: detectToneHints(event.suggestion),
-    termHits: extractTermHits(event.prefix, event.suggestion),
+    termHits: extractSoulTermHits(event.prefix, event.suggestion),
     timestamp: event.timestamp,
   }
 }
 
-function buildSoulSignalContextKey(event: CompletionEvent): string {
-  const prefix = event.prefix.trim().toLowerCase().slice(0, 24)
-  return `${event.host}::${prefix}`
+export function buildSoulSignalContextKey(event: CompletionEvent): string {
+  const normalizedPrefix = event.prefix.trim().toLowerCase()
+  return `${event.host}::${hashSoulContextKey(normalizedPrefix)}`
 }
 
 function classifySuggestionLength(text: string): 'short' | 'medium' | 'long' {
@@ -157,16 +157,32 @@ function detectToneHints(text: string): string[] {
   return hints
 }
 
-function extractTermHits(prefix: string, suggestion: string): string[] {
-  const prefixTerms = new Set(extractWordTerms(prefix))
-  const suggestionTerms = extractWordTerms(suggestion)
+export function extractSoulTermHits(prefix: string, suggestion: string): string[] {
+  const prefixTerms = new Set(extractSoulTerms(prefix))
+  const suggestionTerms = extractSoulTerms(suggestion)
 
   return [...new Set(suggestionTerms.filter(term => prefixTerms.has(term)))]
 }
 
-function extractWordTerms(text: string): string[] {
-  const matches = text.toLowerCase().match(/[a-z][a-z0-9-]{1,}/g) ?? []
-  return matches.filter(term => term.length >= 3)
+function extractSoulTerms(text: string): string[] {
+  const normalized = text.toLowerCase()
+  const terms = new Set<string>()
+
+  const latinMatches = normalized.match(/[a-z][a-z0-9-]{1,}/g) ?? []
+  for (const term of latinMatches) {
+    if (term.length >= 3) {
+      terms.add(term)
+    }
+  }
+
+  const hanMatches = normalized.match(/\p{Script=Han}{2,}/gu) ?? []
+  for (const phrase of hanMatches) {
+    for (const term of collectHanTerms(phrase)) {
+      terms.add(term)
+    }
+  }
+
+  return [...terms]
 }
 
 function dedupeDerivedSoulSignalTags(tags: DerivedSoulSignalTag[]): DerivedSoulSignalTag[] {
@@ -187,4 +203,31 @@ function dedupeDerivedSoulSignalTags(tags: DerivedSoulSignalTag[]): DerivedSoulS
 
 function truncateForSoulSignal(text: string): string {
   return text.trim().slice(0, 120)
+}
+
+function collectHanTerms(value: string): string[] {
+  const terms = new Set<string>([value])
+
+  for (const windowSize of [4, 3, 2]) {
+    if (value.length < windowSize) {
+      continue
+    }
+
+    for (let index = 0; index <= value.length - windowSize; index += 1) {
+      terms.add(value.slice(index, index + windowSize))
+    }
+  }
+
+  return [...terms]
+}
+
+function hashSoulContextKey(value: string): string {
+  let hash = 0
+
+  for (let index = 0; index < value.length; index += 1) {
+    hash = ((hash << 5) - hash) + value.charCodeAt(index)
+    hash |= 0
+  }
+
+  return Math.abs(hash).toString(36)
 }

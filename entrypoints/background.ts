@@ -113,9 +113,16 @@ export default defineBackground(() => {
         void putCompletionEvent(message.payload).catch((error: unknown) => {
           console.warn('[copycat] failed to persist completion event', error)
         })
-        void persistSoulObservedSignals(message.payload).catch((error: unknown) => {
-          console.warn('[copycat] failed to persist Soul observed signals', error)
-        })
+        void loadSettings()
+          .then((settings) => {
+            if (!settings.soul.enabled) {
+              return
+            }
+            return persistSoulObservedSignals(message.payload)
+          })
+          .catch((error: unknown) => {
+            console.warn('[copycat] failed to persist Soul observed signals', error)
+          })
         sendResponse({ ok: true })
         return false
 

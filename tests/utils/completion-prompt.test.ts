@@ -18,8 +18,11 @@ const baseSoulSettings: Settings['soul'] = {
 }
 
 describe('buildSoulContext', () => {
-  it('projects soul fields into layered prompt blocks with application rules', () => {
-    expect(buildSoulContext(baseSoulSettings)).toBe(
+  it('projects explicit soul fields into layered prompt blocks with application rules', () => {
+    expect(buildSoulContext({
+      enabled: true,
+      explicit: baseSoulSettings.profile,
+    })).toBe(
       '[Role Context]\n'
       + '用户主要在做浏览器插件和 AI 输入体验。\n\n'
       + '[Writing Preferences]\n'
@@ -40,13 +43,13 @@ describe('buildSoulContext', () => {
 
   it('returns an empty string when soul is disabled or all fields are empty', () => {
     expect(buildSoulContext({
-      ...baseSoulSettings,
       enabled: false,
+      explicit: baseSoulSettings.profile,
     })).toBe('')
 
     expect(buildSoulContext({
       enabled: true,
-      profile: {
+      explicit: {
         identity: '',
         style: '',
         preferences: '',
@@ -60,7 +63,7 @@ describe('buildSoulContext', () => {
   it('splits multi-line textarea fields into multiple list items', () => {
     expect(buildSoulContext({
       enabled: true,
-      profile: {
+      explicit: {
         identity: '',
         style: '表达直接\n少废话',
         preferences: '先给结论',
@@ -78,7 +81,7 @@ describe('buildSoulContext', () => {
   it('preserves hard constraints before trimming low-priority notes', () => {
     const soulContext = buildSoulContext({
       enabled: true,
-      profile: {
+      explicit: {
         identity: '用户主要在做浏览器插件和 AI 输入体验。',
         style: '',
         preferences: '',
@@ -96,7 +99,7 @@ describe('buildSoulContext', () => {
   it('keeps a stable output order after budget selection', () => {
     const soulContext = buildSoulContext({
       enabled: true,
-      profile: {
+      explicit: {
         identity: '资深工程师',
         style: '表达直接',
         preferences: '先给结论',
@@ -115,7 +118,7 @@ describe('buildSoulContext', () => {
   it('always retains application rules when soul content is truncated', () => {
     const soulContext = buildSoulContext({
       enabled: true,
-      profile: {
+      explicit: {
         identity: '用户主要在做浏览器插件和 AI 输入体验。',
         style: '表达直接',
         preferences: '先给结论',
@@ -132,7 +135,7 @@ describe('buildSoulContext', () => {
   it('returns budget metadata for included, dropped, and trimmed soul blocks', () => {
     const projection = buildSoulProjection({
       enabled: true,
-      profile: {
+      explicit: {
         identity: '用户主要在做浏览器插件和 AI 输入体验。',
         style: '表达直接',
         preferences: '先给结论',
@@ -153,11 +156,37 @@ describe('buildSoulContext', () => {
       wasDropped: false,
     })
   })
+
+  it('includes learned soul blocks after explicit soul blocks', () => {
+    const context = buildSoulContext({
+      enabled: true,
+      explicit: {
+        identity: '用户主要在做浏览器插件和 AI 输入体验。',
+        style: '',
+        preferences: '先给结论',
+        avoidances: '',
+        terms: '',
+        notes: '',
+      },
+      learned: {
+        preferences: ['Lead with the answer when it fits naturally.'],
+        avoidances: ['Avoid hype, promotional language, and exaggerated claims.'],
+        terms: ['rag'],
+      },
+    })
+
+    expect(context).toContain('[Learned Preferences]\n- Lead with the answer when it fits naturally.')
+    expect(context).toContain('[Learned Avoidances]\n- Avoid hype, promotional language, and exaggerated claims.')
+    expect(context).toContain('[Learned Terms]\n- rag')
+  })
 })
 
 describe('buildCompletionUserPrompt', () => {
   it('injects soul before knowledge and prefix blocks', () => {
-    const soulContext = buildSoulContext(baseSoulSettings)
+    const soulContext = buildSoulContext({
+      enabled: true,
+      explicit: baseSoulSettings.profile,
+    })
 
     expect(buildCompletionUserPrompt({
       prefix: '我想开发一个博客系统',

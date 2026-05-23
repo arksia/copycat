@@ -1,3 +1,5 @@
+export { buildLearnedSoulBlocks, distillSoulSignals } from './distill'
+export { buildExplicitSoulBlocks } from './profile'
 export { buildSoulContext, buildSoulProjection } from './prompt'
 export {
   buildSoulSignalEvidence,
@@ -6,6 +8,7 @@ export {
 export {
   getSoulObservedSignalSnapshot,
   isSoulObservedSignalMature,
+  listMatureSoulObservedSignals,
   listSoulObservedSignals,
   putSoulObservedSignal,
   upsertSoulObservedSignal,

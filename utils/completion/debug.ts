@@ -40,6 +40,10 @@ export interface BuildCompletionDebugInfoArgs {
     context: string
     enabled: boolean
     budget?: CompletionDebugInfo['soulBudget']
+    explicitContext?: CompletionDebugInfo['soulExplicitContext']
+    learnedContext?: CompletionDebugInfo['soulLearnedContext']
+    learnedProfile?: CompletionDebugInfo['soulLearnedProfile']
+    observedSignalCount?: CompletionDebugInfo['soulObservedSignalCount']
   }
   soulSignals?: CompletionDebugInfo['soulSignals']
   telemetry?: {
@@ -82,6 +86,10 @@ export function buildCompletionDebugInfo(
       text: chunk.text,
     })),
     soulContext: args.soul?.context ?? debug.soulContext,
+    soulExplicitContext: args.soul?.explicitContext ?? debug.soulExplicitContext,
+    soulLearnedContext: args.soul?.learnedContext ?? debug.soulLearnedContext,
+    soulLearnedProfile: args.soul?.learnedProfile ?? debug.soulLearnedProfile,
+    soulObservedSignalCount: args.soul?.observedSignalCount ?? debug.soulObservedSignalCount,
     soulEnabled: (args.soul?.context ?? debug.soulContext ?? '').length > 0,
     soulConfigured: args.soul?.enabled ?? debug.soulConfigured,
     soulCharCount: (args.soul?.context ?? debug.soulContext ?? '').length,

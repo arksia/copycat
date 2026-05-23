@@ -89,6 +89,11 @@ export async function listSoulObservedSignals(
   return args.matureOnly ? all.filter(isSoulObservedSignalMature) : all
 }
 
+export async function listMatureSoulObservedSignals(limit = 20): Promise<SoulObservedSignal[]> {
+  const all = await listSoulObservedSignalsByRecency(limit)
+  return all.filter(isSoulObservedSignalMature)
+}
+
 /**
  * Builds one compact snapshot for debug or dev inspection.
  *

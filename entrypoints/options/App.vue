@@ -58,7 +58,10 @@ const telemetryError = ref('')
 const loadingTelemetry = ref(false)
 
 const provider = computed(() => resolveProviderPreset(settings.value.provider))
-const soulPreview = computed(() => buildSoulContext(settings.value.soul))
+const soulPreview = computed(() => buildSoulContext({
+  enabled: settings.value.soul.enabled,
+  explicit: settings.value.soul.profile,
+}))
 
 onMounted(async () => {
   try {
