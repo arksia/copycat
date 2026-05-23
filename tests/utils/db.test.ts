@@ -310,7 +310,6 @@ describe('indexeddb repositories', () => {
         kbId: 'default',
         docId: 'doc-1',
         text: '虚拟列表适合处理长列表渲染和滚动性能问题。',
-        keywords: ['虚拟列表', '虚拟', '列表', '滚动', '性能'],
         embedding: {
           backend: 'wasm',
           embeddedAt: 100,
@@ -329,7 +328,6 @@ describe('indexeddb repositories', () => {
         kbId: 'other',
         docId: 'doc-2',
         text: '这个 chunk 属于另一个知识库。',
-        keywords: ['知识库'],
         embedding: {
           backend: 'wasm',
           embeddedAt: 100,
@@ -375,7 +373,6 @@ describe('indexeddb repositories', () => {
       candidateCount: 1,
       returnedCount: 1,
     }))
-    expect(result.recall.queryTerms).toEqual(expect.arrayContaining(['虚拟', '列表', '滚动', '性能']))
     expect(result.rerank).toEqual(expect.objectContaining({
       strategy: 'semantic_only_v1',
       semanticEnabled: true,

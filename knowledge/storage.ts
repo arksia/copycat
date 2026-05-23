@@ -1,7 +1,6 @@
 import type { CompletionDebugInfo, KnowledgeChunk, KnowledgeDocument } from '~/types'
 import { openCopycatDb, requestToPromise, transactionToPromise } from '~/utils/storage/client'
 import { DB_INDEXES, DB_STORES } from '~/utils/storage/schema'
-import { extractKnowledgeKeywords } from './chunker'
 import { retrieveKnowledge } from './retriever'
 
 interface SearchKnowledgeChunksResult {
@@ -95,9 +94,6 @@ export async function putKnowledgeDocument(document: KnowledgeDocument): Promise
  * - chunking has completed and retrieval data should be stored locally
  * - callers already hold the final chunk array in memory
  *
- * Expects:
- * - all chunks to contain precomputed `keywords`
- *
  * Returns:
  * - nothing
  */
@@ -182,17 +178,17 @@ export async function deleteKnowledgeDocument(args: {
 }
 
 /**
- * Searches stored knowledge chunks for one knowledge base with lightweight keyword retrieval.
+ * Searches stored knowledge chunks for one knowledge base with semantic retrieval.
  *
  * Use when:
- * - a caller needs local grounding snippets without embeddings
- * - the current phase should stay lightweight and deterministic
+ * - a caller needs local grounding snippets with semantic ranking
+ * - the current phase should stay local and deterministic
  *
  * Expects:
  * - `query` to be non-empty natural language text
  *
  * Returns:
- * - the top-ranked chunks plus keyword-index recall metadata for debug surfaces
+ * - the top-ranked chunks plus retrieval metadata for debug surfaces
  */
 export async function searchKnowledgeChunks(args: {
   chunks?: KnowledgeChunk[]
@@ -206,21 +202,18 @@ export async function searchKnowledgeChunks(args: {
   }
   topK: number
 }): Promise<SearchKnowledgeChunksResult> {
-  const queryTerms = extractKnowledgeKeywords(args.query)
   const allChunks = args.chunks ?? await listKnowledgeChunks(args.kbId)
   if (args.semanticMeta === undefined) {
     return {
       chunks: [],
       recall: {
         strategy: 'semantic_index',
-        queryTerms,
         candidateCount: 0,
         returnedCount: 0,
       },
       rerank: {
         strategy: 'semantic_only_v1',
         semanticEnabled: false,
-        queryTerms,
         rankedChunks: [],
       },
     }
@@ -250,7 +243,6 @@ export async function searchKnowledgeChunks(args: {
     chunks: result.chunks,
     recall: {
       strategy: 'semantic_index',
-      queryTerms,
       candidateCount: allChunks.length,
       returnedCount: result.chunks.length,
     },

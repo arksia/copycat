@@ -212,3 +212,4 @@ Before finishing, verify:
 - Keep `AGENTS.md` aligned with how the repository is actually being developed.
 - Do not copy broad template rules blindly if they do not fit this repo.
 - When project conventions change, update this file in the same task or immediately after.
+- Use Conventional Commits for commit messages: [conventionalcommits.org](https://www.conventionalcommits.org/en/v1.0.0/).

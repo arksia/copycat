@@ -1,8 +1,5 @@
 export { resolveKnowledgeRetrievalBudget } from './budget'
-export {
-  chunkKnowledgeDocument,
-  extractKnowledgeKeywords,
-} from './chunker'
+export { chunkKnowledgeDocument } from './chunker'
 export {
   buildKnowledgeDocumentEmbedding,
   buildKnowledgeChunkEmbedding,

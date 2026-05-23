@@ -57,9 +57,6 @@ export async function openCopycatDb(): Promise<IDBDatabase> {
         })
         knowledgeChunks.createIndex(DB_INDEXES.knowledgeChunksByDocument, 'docId')
         knowledgeChunks.createIndex(DB_INDEXES.knowledgeChunksByKnowledgeBase, 'kbId')
-        knowledgeChunks.createIndex(DB_INDEXES.knowledgeChunksByKeyword, 'keywords', {
-          multiEntry: true,
-        })
       }
 
       if (!db.objectStoreNames.contains(DB_STORES.soulObservedSignals)) {

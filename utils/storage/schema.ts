@@ -27,7 +27,7 @@ export const DB_NAME = 'copycat'
  * Returns:
  * - the active database version integer
  */
-export const DB_VERSION = 4
+export const DB_VERSION = 5
 
 /**
  * Shared object-store names used by the local data layer.
@@ -62,7 +62,6 @@ export const DB_INDEXES = {
   completionEventsByHostTimestamp: 'by-host-timestamp',
   completionEventsByTimestamp: 'by-timestamp',
   knowledgeChunksByDocument: 'by-document',
-  knowledgeChunksByKeyword: 'by-keyword',
   knowledgeChunksByKnowledgeBase: 'by-knowledge-base',
   knowledgeDocumentsByKnowledgeBase: 'by-knowledge-base',
   soulObservedSignalsByLastSeenAt: 'by-last-seen-at',

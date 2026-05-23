@@ -22,7 +22,6 @@ describe('buildKnowledgeContext', () => {
         kbId: 'default',
         docId: 'doc-1',
         text: '虚拟列表适合处理长列表渲染和滚动性能问题。',
-        keywords: ['虚拟列表', '滚动', '性能'],
         metadata: {
           charCount: 20,
           sourceName: 'Virtual List Notes',
@@ -34,7 +33,6 @@ describe('buildKnowledgeContext', () => {
         kbId: 'default',
         docId: 'doc-1',
         text: '实现时要避免一次渲染全部节点。',
-        keywords: ['渲染', '节点'],
         metadata: {
           charCount: 16,
           sourceName: 'Virtual List Notes',
@@ -46,7 +44,6 @@ describe('buildKnowledgeContext', () => {
         kbId: 'default',
         docId: 'doc-2',
         text: '这条不应该被选中。',
-        keywords: ['其他'],
         metadata: {
           charCount: 10,
           sourceName: 'Other',
@@ -72,7 +69,6 @@ describe('buildKnowledgeContext', () => {
         kbId: 'default',
         docId: 'doc-1',
         text: '这是一段很长的知识片段，用来验证超长 chunk 会被裁剪而不是整个丢弃。'.repeat(6),
-        keywords: ['知识', '裁剪'],
         metadata: {
           charCount: 120,
           sourceName: 'Long Notes',
@@ -102,7 +98,6 @@ describe('buildKnowledgeContext', () => {
         kbId: 'default',
         docId: 'doc-1',
         text: '第一条知识片段。',
-        keywords: ['第一条'],
         metadata: {
           charCount: 8,
           sourceName: 'Doc A',
@@ -114,7 +109,6 @@ describe('buildKnowledgeContext', () => {
         kbId: 'default',
         docId: 'doc-1',
         text: '第二条知识片段长度明显更长，用来触发预算不足时的丢弃行为。'.repeat(4),
-        keywords: ['第二条'],
         metadata: {
           charCount: 80,
           sourceName: 'Doc B',

@@ -53,7 +53,6 @@ describe('buildCompletionDebugInfo', () => {
         },
         recall: {
           strategy: 'semantic_index',
-          queryTerms: ['虚拟列表', '滚动', '性能'],
           candidateCount: 4,
           returnedCount: 1,
         },
@@ -63,17 +62,12 @@ describe('buildCompletionDebugInfo', () => {
           semanticBackend: 'wasm',
           semanticModel: 'test-model',
           semanticQueryLatencyMs: 12,
-          queryTerms: ['虚拟列表', '滚动', '性能'],
           rankedChunks: [
             {
               id: 'chunk-1',
               sourceName: 'Virtual List Notes',
-              totalScore: 7,
-              lexicalScore: 7,
-              semanticScore: null,
-              matchedTerms: 3,
-              keywordHits: 2,
-              textHits: 1,
+              totalScore: 0.92,
+              semanticScore: 0.92,
               tokenCount: 10,
               charCount: 16,
             },
@@ -95,7 +89,6 @@ describe('buildCompletionDebugInfo', () => {
             kbId: 'default',
             docId: 'doc-1',
             text: '虚拟列表适合处理长列表渲染。',
-            keywords: ['虚拟列表'],
             metadata: {
               charCount: 16,
               sourceName: 'Virtual List Notes',
@@ -181,7 +174,6 @@ describe('buildCompletionDebugInfo', () => {
       knowledgeQuery: '虚拟列表',
       knowledgeRecall: {
         strategy: 'semantic_index',
-        queryTerms: ['虚拟列表', '滚动', '性能'],
         candidateCount: 4,
         returnedCount: 1,
       },
@@ -191,17 +183,12 @@ describe('buildCompletionDebugInfo', () => {
         semanticBackend: 'wasm',
         semanticModel: 'test-model',
         semanticQueryLatencyMs: 12,
-        queryTerms: ['虚拟列表', '滚动', '性能'],
         rankedChunks: [
           {
             id: 'chunk-1',
             sourceName: 'Virtual List Notes',
-            totalScore: 7,
-            lexicalScore: 7,
-            semanticScore: null,
-            matchedTerms: 3,
-            keywordHits: 2,
-            textHits: 1,
+            totalScore: 0.92,
+            semanticScore: 0.92,
             tokenCount: 10,
             charCount: 16,
           },

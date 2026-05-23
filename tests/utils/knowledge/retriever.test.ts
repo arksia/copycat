@@ -10,7 +10,6 @@ describe('retrieveKnowledge', () => {
         kbId: 'default',
         docId: 'doc-1',
         text: '虚拟列表适合处理长列表滚动渲染。',
-        keywords: ['虚拟列表', '虚拟', '列表', '滚动', '渲染'],
         metadata: { charCount: 16, sourceName: 'A', tokenCount: 12 },
       },
       {
@@ -18,7 +17,6 @@ describe('retrieveKnowledge', () => {
         kbId: 'default',
         docId: 'doc-2',
         text: '博客系统需要评论、标签和后台管理。',
-        keywords: ['博客系统', '评论', '标签', '后台'],
         metadata: { charCount: 16, sourceName: 'B', tokenCount: 10 },
       },
     ]
@@ -33,7 +31,6 @@ describe('retrieveKnowledge', () => {
     expect(results.rerank).toEqual({
       strategy: 'semantic_only_v1',
       semanticEnabled: false,
-      queryTerms: expect.arrayContaining(['虚拟', '列表', '渲染']),
       rankedChunks: [],
     })
   })
@@ -45,7 +42,6 @@ describe('retrieveKnowledge', () => {
         kbId: 'default',
         docId: 'doc-1',
         text: 'virtual list performance',
-        keywords: ['virtual', 'list', 'performance'],
         embedding: {
           backend: 'wasm',
           embeddedAt: 100,
@@ -60,7 +56,6 @@ describe('retrieveKnowledge', () => {
         kbId: 'default',
         docId: 'doc-2',
         text: 'virtual list performance with extra caching metrics background noise',
-        keywords: ['virtual', 'list', 'performance', 'caching', 'metrics', 'background', 'noise'],
         embedding: {
           backend: 'wasm',
           embeddedAt: 100,
@@ -87,9 +82,6 @@ describe('retrieveKnowledge', () => {
       id: 'focused',
       semanticScore: 1,
       totalScore: 1,
-      matchedTerms: 3,
-      keywordHits: 3,
-      textHits: 0,
       tokenCount: 3,
       charCount: 24,
     }))
@@ -97,9 +89,6 @@ describe('retrieveKnowledge', () => {
       id: 'noisy',
       semanticScore: 1,
       totalScore: 1,
-      matchedTerms: 3,
-      keywordHits: 3,
-      textHits: 0,
       tokenCount: 7,
       charCount: 68,
     }))
@@ -112,7 +101,6 @@ describe('retrieveKnowledge', () => {
         kbId: 'default',
         docId: 'doc-1',
         text: 'virtual list performance',
-        keywords: ['virtual', 'list', 'performance'],
         embedding: {
           backend: 'wasm',
           embeddedAt: 100,
@@ -127,7 +115,6 @@ describe('retrieveKnowledge', () => {
         kbId: 'default',
         docId: 'doc-2',
         text: 'windowing for large collections',
-        keywords: ['windowing', 'collections'],
         embedding: {
           backend: 'wasm',
           embeddedAt: 100,
@@ -157,7 +144,6 @@ describe('retrieveKnowledge', () => {
     }))
     expect(results.rerank.rankedChunks[1]).toEqual(expect.objectContaining({
       id: 'semantic-boosted',
-      lexicalScore: 0,
       semanticScore: 1,
       totalScore: 1,
     }))

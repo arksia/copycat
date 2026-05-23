@@ -5,7 +5,6 @@ import type { KnowledgeChunk } from '~/types'
  *
  * Use when:
  * - normalized document text should be split into retrieval-sized chunks
- * - callers want keywords attached during chunk creation
  *
  * Expects:
  * - `text` to already be normalized plain text
@@ -76,57 +75,12 @@ export function chunkKnowledgeDocument(
     kbId: args.kbId,
     docId: args.docId,
     text,
-    keywords: extractKnowledgeKeywords(text),
     metadata: {
       charCount: text.length,
       sourceName: args.sourceName,
       tokenCount: estimateTokenCount(text),
     },
   }))
-}
-
-/**
- * Extracts lightweight retrieval keywords from one text block.
- *
- * Before:
- * - `"使用虚拟列表优化长列表渲染 performance"`
- *
- * After:
- * - `["使用虚拟列表优化长列表渲染", "使用虚拟", "虚拟列表", "列表优化", "使用虚", "虚拟列", "long", "performance"]`
- */
-export function extractKnowledgeKeywords(text: string): string[] {
-  const normalized = text.toLowerCase()
-  const keywords = new Set<string>()
-
-  for (const match of normalized.matchAll(/[a-z0-9][a-z0-9-]*/g)) {
-    const value = match[0]
-    if (value.length >= 2) {
-      keywords.add(value)
-    }
-  }
-
-  for (const match of normalized.matchAll(/\p{Script=Han}+/gu)) {
-    const value = match[0]
-    if (value.length >= 2) {
-      collectHanTerms(keywords, value)
-    }
-  }
-
-  return [...keywords]
-}
-
-function collectHanTerms(keywords: Set<string>, value: string) {
-  keywords.add(value)
-
-  for (const windowSize of [4, 3, 2]) {
-    if (value.length < windowSize) {
-      continue
-    }
-
-    for (let index = 0; index <= value.length - windowSize; index += 1) {
-      keywords.add(value.slice(index, index + windowSize))
-    }
-  }
 }
 
 function splitLongParagraph(paragraph: string, maxChars: number): string[] {

@@ -190,7 +190,6 @@ export interface CompletionDebugInfo {
   knowledgeQuery?: string
   knowledgeRecall?: {
     strategy: 'semantic_index'
-    queryTerms: string[]
     candidateCount: number
     returnedCount: number
   }
@@ -200,16 +199,11 @@ export interface CompletionDebugInfo {
     semanticBackend?: KnowledgeEmbeddingBackend
     semanticModel?: string
     semanticQueryLatencyMs?: number
-    queryTerms: string[]
     rankedChunks: Array<{
       id: string
       sourceName: string
       totalScore: number
-      lexicalScore: number
       semanticScore: number | null
-      matchedTerms: number
-      keywordHits: number
-      textHits: number
       tokenCount: number
       charCount: number
     }>
@@ -320,7 +314,6 @@ export interface KnowledgeChunk {
   kbId: string
   docId: string
   text: string
-  keywords: string[]
   embedding?: KnowledgeChunkEmbedding
   metadata: {
     charCount: number
