@@ -207,9 +207,16 @@ Before finishing, verify:
 - types remain explicit across storage, runtime messaging, and network boundaries
 - tests and compile checks were actually rerun
 
-## 12. Documentation Expectations
+## 12. Commit Messages
+
+- Use Conventional Commits for commit messages.
+- Format: `type(scope): subject` when a scope helps, otherwise `type: subject`.
+- Common types in this repo: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`.
+- Keep the subject short, imperative, and lowercase, and avoid trailing punctuation.
+- Add a body only when extra context is needed for reviewers.
+
+## 13. Documentation Expectations
 
 - Keep `AGENTS.md` aligned with how the repository is actually being developed.
 - Do not copy broad template rules blindly if they do not fit this repo.
 - When project conventions change, update this file in the same task or immediately after.
-- Use Conventional Commits for commit messages: [conventionalcommits.org](https://www.conventionalcommits.org/en/v1.0.0/).
