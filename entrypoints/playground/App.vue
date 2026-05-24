@@ -265,7 +265,7 @@ const debugSections = computed(() => [
     key: 'prompt',
     title: 'Prompt anatomy',
     summary: `${previewPrefix.value.length} prefix chars · ${previewSuffix.value.length} suffix chars`,
-    open: true,
+    open: false,
   },
   {
     key: 'soul',
@@ -285,7 +285,7 @@ const debugSections = computed(() => [
       : debugSoulLearnedContext.value
         ? 'learned context available'
         : 'no learned soul yet',
-    open: true,
+    open: false,
   },
   {
     key: 'observed-signals',
@@ -293,7 +293,7 @@ const debugSections = computed(() => [
     summary: parsedSoulSignals.value
       ? `${parsedSoulSignals.value.totalCount} observed · ${parsedSoulSignals.value.matureCount} mature`
       : 'no observed signals yet',
-    open: true,
+    open: false,
   },
   {
     key: 'knowledge',
@@ -340,6 +340,42 @@ const knowledgeHighlights = computed(() => {
     },
   ]
 })
+const requestStateItems = computed(() => [
+  ['Provider', settings.value ? `${settings.value.provider} / ${settings.value.model}` : 'loading'],
+  ['API key', settings.value?.apiKey ? 'configured' : 'missing'],
+  ['Base URL', settings.value?.baseUrl || 'missing'],
+  ['Request id', lastRequestId.value || 'none'],
+  ['Latency', lastLatencyMs.value === null ? 'n/a' : `${lastLatencyMs.value} ms`],
+  ['Prefix length', String(previewPrefix.value.length)],
+  ['Enabled', settings.value?.enabled ? 'yes' : 'no'],
+  ['Soul', debugSoulEnabled.value
+    ? `projected · ${debugSoulCharCount.value} chars`
+    : debugSoulConfigured.value
+      ? 'configured · 0 chars'
+      : 'disabled'],
+])
+const debugSummaryGroups = computed(() => [
+  {
+    title: 'Soul',
+    items: soulHighlights.value,
+    empty: 'No soul data yet.',
+  },
+  {
+    title: 'Learned Soul',
+    items: learnedSoulHighlights.value,
+    empty: 'No learned Soul data yet.',
+  },
+  {
+    title: 'Observed signals',
+    items: soulSignalHighlights.value,
+    empty: 'No observed Soul signals yet.',
+  },
+  {
+    title: 'Knowledge',
+    items: knowledgeHighlights.value,
+    empty: 'No knowledge data yet.',
+  },
+])
 const parsedSoulBudget = computed(() => {
   if (!debugSoulBudget.value) {
     return null
@@ -994,241 +1030,130 @@ function openOptions() {
 
         <section class="space-y-6">
           <div class="card">
-            <h2 class="mb-4 text-base font-semibold">Request state</h2>
-            <dl class="space-y-3 text-sm">
-              <div>
-                <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Provider
+            <h2 class="mb-3 text-base font-semibold">Request state</h2>
+            <dl class="grid gap-x-4 gap-y-3 sm:grid-cols-2">
+              <div v-for="[label, value] in requestStateItems" :key="label">
+                <dt class="text-[11px] font-semibold uppercase tracking-[0.16em] text-neutral-500">
+                  {{ label }}
                 </dt>
-                <dd class="mt-1 text-neutral-800">
-                  {{ settings?.provider || 'loading' }} / {{ settings?.model || 'loading' }}
-                </dd>
-              </div>
-              <div>
-                <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  API key
-                </dt>
-                <dd class="mt-1 text-neutral-800">
-                  {{ settings?.apiKey ? 'configured' : 'missing' }}
-                </dd>
-              </div>
-              <div>
-                <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Base URL
-                </dt>
-                <dd class="mt-1 break-all text-neutral-800">
-                  {{ settings?.baseUrl || 'missing' }}
-                </dd>
-              </div>
-              <div>
-                <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Request id
-                </dt>
-                <dd class="mt-1 font-mono text-xs text-neutral-700">
-                  {{ lastRequestId || 'none' }}
-                </dd>
-              </div>
-              <div>
-                <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Latency
-                </dt>
-                <dd class="mt-1 text-neutral-800">
-                  {{ lastLatencyMs === null ? 'n/a' : `${lastLatencyMs} ms` }}
-                </dd>
-              </div>
-              <div>
-                <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Prefix length
-                </dt>
-                <dd class="mt-1 text-neutral-800">{{ previewPrefix.length }}</dd>
-              </div>
-              <div>
-                <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Enabled
-                </dt>
-                <dd class="mt-1 text-neutral-800">{{ settings?.enabled ? 'yes' : 'no' }}</dd>
-              </div>
-              <div>
-                <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Soul
-                </dt>
-                <dd class="mt-1 text-neutral-800">
-                  {{
-                    debugSoulEnabled
-                      ? `projected · ${debugSoulCharCount} chars`
-                      : debugSoulConfigured
-                        ? 'configured · 0 chars'
-                        : 'disabled'
-                  }}
-                </dd>
-              </div>
-            </dl>
-          </div>
-
-          <div class="card">
-            <div class="mb-4 flex items-center justify-between gap-3">
-              <h2 class="text-base font-semibold">Flow log</h2>
-              <div class="flex items-center gap-3">
-                <span class="text-xs text-neutral-500">latest 40 events</span>
-                <button
-                  class="btn-ghost px-3 py-1 text-xs"
-                  :disabled="flowLogs.length === 0"
-                  @click="copyFlowLogs"
+                <dd
+                  class="mt-1 text-sm text-neutral-800"
+                  :class="{
+                    'break-all': label === 'Base URL',
+                    'font-mono text-xs text-neutral-700': label === 'Request id',
+                  }"
                 >
-                  {{ flowLogsCopied ? 'Copied' : 'Copy' }}
-                </button>
-              </div>
-            </div>
-            <div class="rounded-lg bg-neutral-950 p-3">
-              <pre class="max-h-80 overflow-auto whitespace-pre-wrap break-all text-xs text-neutral-100">{{ flowLogs.length ? flowLogs.join('\n') : 'No flow events yet.' }}</pre>
-            </div>
-          </div>
-
-          <div class="grid gap-4 lg:grid-cols-4">
-            <div class="card">
-              <h2 class="mb-4 text-base font-semibold">Soul snapshot</h2>
-              <dl class="space-y-3 text-sm">
-                <div v-for="item in soulHighlights" :key="item.label">
-                  <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                    {{ item.label }}
-                  </dt>
-                  <dd class="mt-1 text-neutral-800">{{ item.value }}</dd>
-                </div>
-                <div v-if="soulHighlights.length === 0" class="text-sm text-neutral-400">
-                  No soul data yet.
-                </div>
-              </dl>
-            </div>
-
-            <div class="card">
-              <h2 class="mb-4 text-base font-semibold">Learned Soul</h2>
-              <dl class="space-y-3 text-sm">
-                <div v-for="item in learnedSoulHighlights" :key="item.label">
-                  <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                    {{ item.label }}
-                  </dt>
-                  <dd class="mt-1 text-neutral-800">{{ item.value }}</dd>
-                </div>
-                <div v-if="learnedSoulHighlights.length === 0" class="text-sm text-neutral-400">
-                  No learned Soul data yet.
-                </div>
-              </dl>
-            </div>
-
-            <div class="card">
-              <h2 class="mb-4 text-base font-semibold">Observed signals</h2>
-              <dl class="space-y-3 text-sm">
-                <div v-for="item in soulSignalHighlights" :key="item.label">
-                  <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                    {{ item.label }}
-                  </dt>
-                  <dd class="mt-1 text-neutral-800">{{ item.value }}</dd>
-                </div>
-                <div v-if="soulSignalHighlights.length === 0" class="text-sm text-neutral-400">
-                  No observed Soul signals yet.
-                </div>
-              </dl>
-            </div>
-
-            <div class="card">
-              <h2 class="mb-4 text-base font-semibold">Knowledge snapshot</h2>
-              <dl class="space-y-3 text-sm">
-                <div v-for="item in knowledgeHighlights" :key="item.label">
-                  <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                    {{ item.label }}
-                  </dt>
-                  <dd class="mt-1 text-neutral-800">{{ item.value }}</dd>
-                </div>
-                <div v-if="knowledgeHighlights.length === 0" class="text-sm text-neutral-400">
-                  No knowledge data yet.
-                </div>
-              </dl>
-            </div>
-          </div>
-
-          <div class="card">
-            <h2 class="mb-4 text-base font-semibold">Timings</h2>
-            <dl class="space-y-3 text-sm">
-              <div v-for="[label, value] in timingSummary" :key="label">
-                <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  {{ label }}
-                </dt>
-                <dd class="mt-1 text-neutral-800">{{ value }}</dd>
-              </div>
-              <div v-if="timingSummary.length === 0" class="text-sm text-neutral-400">
-                No timing data yet.
-              </div>
-            </dl>
-          </div>
-
-          <div class="card">
-            <h2 class="mb-4 text-base font-semibold">Knowledge timings</h2>
-            <dl class="space-y-3 text-sm">
-              <div v-for="[label, value] in knowledgeTimingSummary" :key="label">
-                <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  {{ label }}
-                </dt>
-                <dd class="mt-1 text-neutral-800">{{ value }}</dd>
-              </div>
-              <div v-if="knowledgeTimingSummary.length === 0" class="text-sm text-neutral-400">
-                No knowledge timing data yet.
-              </div>
-            </dl>
-          </div>
-
-          <div class="card">
-            <h2 class="mb-4 text-base font-semibold">Knowledge budget</h2>
-            <dl class="space-y-3 text-sm">
-              <div v-for="[label, value] in knowledgeBudgetSummary" :key="label">
-                <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  {{ label }}
-                </dt>
-                <dd class="mt-1 text-neutral-800">{{ value }}</dd>
-              </div>
-              <div v-if="knowledgeBudgetSummary.length === 0" class="text-sm text-neutral-400">
-                No knowledge budget data yet.
-              </div>
-            </dl>
-          </div>
-
-          <div class="card">
-            <h2 class="mb-4 text-base font-semibold">Stage activity</h2>
-            <dl class="space-y-3 text-sm">
-              <div>
-                <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Fast completion
-                </dt>
-                <dd class="mt-1 text-neutral-800">
-                  {{ stageFastCompletion ? 'returned' : 'n/a' }}
-                </dd>
-              </div>
-              <div>
-                <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Enhanced requested
-                </dt>
-                <dd class="mt-1 text-neutral-800">
-                  {{ stageEnhancedRequested ? 'yes' : 'no' }}
-                </dd>
-              </div>
-              <div>
-                <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Enhanced outcome
-                </dt>
-                <dd class="mt-1 text-neutral-800">
-                  {{ stageOutcome }}
+                  {{ value }}
                 </dd>
               </div>
             </dl>
+          </div>
 
-            <div class="mt-4">
-              <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                Timeline
-              </div>
-              <ul class="space-y-2 text-sm text-neutral-800">
-                <li v-for="line in stageActivityLines" :key="line" class="rounded bg-neutral-50 px-2 py-1 font-mono text-xs">
-                  {{ line }}
-                </li>
-              </ul>
+          <div class="card">
+            <div class="mb-3">
+              <h2 class="text-base font-semibold">Debug summary</h2>
+              <p class="mt-1 text-xs text-neutral-500">Compact overview for the current request.</p>
+            </div>
+            <div class="space-y-4">
+              <section v-for="group in debugSummaryGroups" :key="group.title" class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                <h3 class="text-sm font-semibold text-neutral-900">{{ group.title }}</h3>
+                <dl v-if="group.items.length > 0" class="mt-3 space-y-2 text-sm">
+                  <div v-for="item in group.items" :key="item.label" class="flex items-start justify-between gap-3">
+                    <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                      {{ item.label }}
+                    </dt>
+                    <dd class="max-w-[65%] text-right text-neutral-800">{{ item.value }}</dd>
+                  </div>
+                </dl>
+                <p v-else class="mt-3 text-sm text-neutral-400">{{ group.empty }}</p>
+              </section>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="mb-3">
+              <h2 class="text-base font-semibold">Runtime summary</h2>
+              <p class="mt-1 text-xs text-neutral-500">Timing, budget, and staging in one place.</p>
+            </div>
+            <div class="space-y-4">
+              <section class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                <h3 class="text-sm font-semibold text-neutral-900">Timings</h3>
+                <dl v-if="timingSummary.length > 0" class="mt-3 grid gap-x-4 gap-y-2 sm:grid-cols-2 text-sm">
+                  <div v-for="[label, value] in timingSummary" :key="label">
+                    <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                      {{ label }}
+                    </dt>
+                    <dd class="mt-1 text-neutral-800">{{ value }}</dd>
+                  </div>
+                </dl>
+                <p v-else class="mt-3 text-sm text-neutral-400">No timing data yet.</p>
+              </section>
+
+              <section class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                <h3 class="text-sm font-semibold text-neutral-900">Knowledge timings</h3>
+                <dl v-if="knowledgeTimingSummary.length > 0" class="mt-3 grid gap-x-4 gap-y-2 sm:grid-cols-2 text-sm">
+                  <div v-for="[label, value] in knowledgeTimingSummary" :key="label">
+                    <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                      {{ label }}
+                    </dt>
+                    <dd class="mt-1 text-neutral-800">{{ value }}</dd>
+                  </div>
+                </dl>
+                <p v-else class="mt-3 text-sm text-neutral-400">No knowledge timing data yet.</p>
+              </section>
+
+              <section class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                <h3 class="text-sm font-semibold text-neutral-900">Knowledge budget</h3>
+                <dl v-if="knowledgeBudgetSummary.length > 0" class="mt-3 space-y-2 text-sm">
+                  <div v-for="[label, value] in knowledgeBudgetSummary" :key="label" class="flex items-start justify-between gap-3">
+                    <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                      {{ label }}
+                    </dt>
+                    <dd class="max-w-[65%] text-right text-neutral-800">{{ value }}</dd>
+                  </div>
+                </dl>
+                <p v-else class="mt-3 text-sm text-neutral-400">No knowledge budget data yet.</p>
+              </section>
+
+              <section class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                <h3 class="text-sm font-semibold text-neutral-900">Stage activity</h3>
+                <dl class="mt-3 grid gap-x-4 gap-y-2 sm:grid-cols-2 text-sm">
+                  <div>
+                    <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                      Fast completion
+                    </dt>
+                    <dd class="mt-1 text-neutral-800">
+                      {{ stageFastCompletion ? 'returned' : 'n/a' }}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                      Enhanced requested
+                    </dt>
+                    <dd class="mt-1 text-neutral-800">
+                      {{ stageEnhancedRequested ? 'yes' : 'no' }}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                      Enhanced outcome
+                    </dt>
+                    <dd class="mt-1 text-neutral-800">
+                      {{ stageOutcome }}
+                    </dd>
+                  </div>
+                </dl>
+                <div class="mt-3">
+                  <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                    Timeline
+                  </div>
+                  <ul class="space-y-2 text-sm text-neutral-800">
+                    <li v-for="line in stageActivityLines" :key="line" class="rounded bg-white px-2 py-1 font-mono text-xs">
+                      {{ line }}
+                    </li>
+                  </ul>
+                </div>
+              </section>
             </div>
           </div>
 
@@ -1245,7 +1170,7 @@ function openOptions() {
               </div>
             </div>
 
-            <div v-if="errorText || blockedReason || infoText" class="mb-4 grid gap-3 md:grid-cols-3">
+            <div v-if="errorText || blockedReason || infoText" class="mb-4 grid gap-3">
               <div v-if="errorText" class="rounded-xl border border-rose-200 bg-rose-50 p-3">
                 <div class="mb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-rose-700">Error</div>
                 <p class="text-sm text-rose-800">{{ errorText }}</p>
@@ -1278,19 +1203,19 @@ function openOptions() {
                 <div v-if="section.key === 'prompt'" class="grid gap-4 border-t border-neutral-200 p-4">
                   <div>
                     <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Prefix</div>
-                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ previewPrefix || '(empty)' }}</pre>
+                    <pre class="max-h-48 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ previewPrefix || '(empty)' }}</pre>
                   </div>
                   <div>
                     <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Suffix</div>
-                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ previewSuffix || '(empty)' }}</pre>
+                    <pre class="max-h-48 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ previewSuffix || '(empty)' }}</pre>
                   </div>
                   <div>
                     <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Applied strategy</div>
-                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugAppliedStrategy || '(empty)' }}</pre>
+                    <pre class="max-h-56 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugAppliedStrategy || '(empty)' }}</pre>
                   </div>
                   <div>
                     <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Prompt layers</div>
-                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugPromptLayers || '(empty)' }}</pre>
+                    <pre class="max-h-56 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugPromptLayers || '(empty)' }}</pre>
                   </div>
                 </div>
 
@@ -1311,15 +1236,15 @@ function openOptions() {
                   </div>
                   <div>
                     <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Explicit soul context</div>
-                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulExplicitContext || '(empty)' }}</pre>
+                    <pre class="max-h-48 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulExplicitContext || '(empty)' }}</pre>
                   </div>
                   <div>
                     <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Merged soul context</div>
-                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulContext || '(empty)' }}</pre>
+                    <pre class="max-h-48 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulContext || '(empty)' }}</pre>
                   </div>
                   <div>
                     <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Soul budget</div>
-                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulBudget || '(empty)' }}</pre>
+                    <pre class="max-h-56 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulBudget || '(empty)' }}</pre>
                   </div>
                 </div>
 
@@ -1340,11 +1265,11 @@ function openOptions() {
                   </div>
                   <div>
                     <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Learned soul context</div>
-                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulLearnedContext || '(empty)' }}</pre>
+                    <pre class="max-h-48 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulLearnedContext || '(empty)' }}</pre>
                   </div>
                   <div>
                     <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Learned soul profile</div>
-                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulLearnedProfile || '(empty)' }}</pre>
+                    <pre class="max-h-56 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulLearnedProfile || '(empty)' }}</pre>
                   </div>
                 </div>
 
@@ -1365,7 +1290,7 @@ function openOptions() {
                   </div>
                   <div>
                     <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Soul signals</div>
-                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulSignals || '(empty)' }}</pre>
+                    <pre class="max-h-64 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulSignals || '(empty)' }}</pre>
                   </div>
                 </div>
 
@@ -1390,60 +1315,79 @@ function openOptions() {
                   </div>
                   <div>
                     <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Knowledge context</div>
-                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeContext || '(empty)' }}</pre>
+                    <pre class="max-h-48 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeContext || '(empty)' }}</pre>
                   </div>
                   <div>
                     <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Knowledge budget</div>
-                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeBudget || '(empty)' }}</pre>
+                    <pre class="max-h-56 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeBudget || '(empty)' }}</pre>
                   </div>
                   <div>
                     <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Knowledge recall</div>
-                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeRecall || '(empty)' }}</pre>
+                    <pre class="max-h-48 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeRecall || '(empty)' }}</pre>
                   </div>
                   <div>
                     <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Knowledge rerank</div>
-                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeRerank || '(empty)' }}</pre>
+                    <pre class="max-h-56 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeRerank || '(empty)' }}</pre>
                   </div>
                   <div>
                     <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Knowledge chunks</div>
-                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeChunks.length ? JSON.stringify(debugKnowledgeChunks, null, 2) : '(empty)' }}</pre>
+                    <pre class="max-h-64 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeChunks.length ? JSON.stringify(debugKnowledgeChunks, null, 2) : '(empty)' }}</pre>
                   </div>
                 </div>
 
                 <div v-else-if="section.key === 'model'" class="grid gap-4 border-t border-neutral-200 p-4">
                   <div>
                     <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Sanitized completion</div>
-                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSanitizedCompletion || '(empty)' }}</pre>
+                    <pre class="max-h-48 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSanitizedCompletion || '(empty)' }}</pre>
                   </div>
                   <div>
                     <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Raw completion</div>
-                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugRawCompletion || '(empty)' }}</pre>
+                    <pre class="max-h-48 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugRawCompletion || '(empty)' }}</pre>
                   </div>
                 </div>
 
                 <div v-else class="grid gap-4 border-t border-neutral-200 p-4">
                   <div>
                     <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Timings</div>
-                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugTimings || '(empty)' }}</pre>
+                    <pre class="max-h-48 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugTimings || '(empty)' }}</pre>
                   </div>
                   <div>
                     <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Telemetry</div>
-                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugTelemetry || '(empty)' }}</pre>
+                    <pre class="max-h-56 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugTelemetry || '(empty)' }}</pre>
                   </div>
                   <div>
                     <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Raw choice</div>
-                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugRawChoice || '(empty)' }}</pre>
+                    <pre class="max-h-48 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugRawChoice || '(empty)' }}</pre>
                   </div>
                   <div>
                     <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">User prompt</div>
-                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugUserPrompt || '(empty)' }}</pre>
+                    <pre class="max-h-56 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugUserPrompt || '(empty)' }}</pre>
                   </div>
                   <div>
                     <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">System prompt</div>
-                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSystemPrompt || '(empty)' }}</pre>
+                    <pre class="max-h-56 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSystemPrompt || '(empty)' }}</pre>
                   </div>
                 </div>
               </details>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="mb-3 flex items-center justify-between gap-3">
+              <h2 class="text-base font-semibold">Flow log</h2>
+              <div class="flex items-center gap-3">
+                <span class="text-xs text-neutral-500">latest 40 events</span>
+                <button
+                  class="btn-ghost px-3 py-1 text-xs"
+                  :disabled="flowLogs.length === 0"
+                  @click="copyFlowLogs"
+                >
+                  {{ flowLogsCopied ? 'Copied' : 'Copy' }}
+                </button>
+              </div>
+            </div>
+            <div class="rounded-lg bg-neutral-950 p-3">
+              <pre class="max-h-64 overflow-auto whitespace-pre-wrap break-all text-xs text-neutral-100">{{ flowLogs.length ? flowLogs.join('\n') : 'No flow events yet.' }}</pre>
             </div>
           </div>
         </section>
