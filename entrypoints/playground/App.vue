@@ -45,6 +45,10 @@ const debugSystemPrompt = ref('')
 const debugPromptLayers = ref('')
 const debugSoulSignals = ref('')
 const debugSoulContext = ref('')
+const debugSoulExplicitContext = ref('')
+const debugSoulLearnedContext = ref('')
+const debugSoulLearnedProfile = ref('')
+const debugSoulObservedSignalCount = ref(0)
 const debugKnowledgeContext = ref('')
 const debugKnowledgeBudget = ref('')
 const debugKnowledgeQuery = ref('')
@@ -167,6 +171,18 @@ const parsedSoulSignals = computed(() => {
     return null
   }
 })
+const parsedSoulLearnedProfile = computed(() => {
+  if (!debugSoulLearnedProfile.value) {
+    return null
+  }
+
+  try {
+    return JSON.parse(debugSoulLearnedProfile.value) as CompletionDebugInfo['soulLearnedProfile']
+  }
+  catch {
+    return null
+  }
+})
 const knowledgeBudgetSummary = computed(() => {
   const budget = parsedPromptLayers.value?.knowledge?.budget ?? parsedKnowledgeBudget.value
   if (budget === null || budget === undefined) {
@@ -202,6 +218,27 @@ const soulHighlights = computed(() => {
     },
   ]
 })
+const learnedSoulHighlights = computed(() => {
+  const learnedProfile = parsedSoulLearnedProfile.value
+  if (learnedProfile === null && !debugSoulLearnedContext.value) {
+    return []
+  }
+
+  return [
+    {
+      label: 'Preferences',
+      value: String(learnedProfile?.preferences.length ?? 0),
+    },
+    {
+      label: 'Avoidances',
+      value: String(learnedProfile?.avoidances.length ?? 0),
+    },
+    {
+      label: 'Terms',
+      value: String(learnedProfile?.terms.length ?? 0),
+    },
+  ]
+})
 const soulSignalHighlights = computed(() => {
   const signals = parsedSoulSignals.value
   if (signals === null || signals === undefined) {
@@ -223,6 +260,64 @@ const soulSignalHighlights = computed(() => {
     },
   ]
 })
+const debugSections = computed(() => [
+  {
+    key: 'prompt',
+    title: 'Prompt anatomy',
+    summary: `${previewPrefix.value.length} prefix chars · ${previewSuffix.value.length} suffix chars`,
+    open: true,
+  },
+  {
+    key: 'soul',
+    title: 'Soul',
+    summary: debugSoulEnabled.value
+      ? `${debugSoulCharCount.value} chars projected`
+      : debugSoulConfigured.value
+        ? 'configured but empty'
+        : 'disabled',
+    open: true,
+  },
+  {
+    key: 'learned-soul',
+    title: 'Learned Soul',
+    summary: parsedSoulLearnedProfile.value
+      ? `${parsedSoulLearnedProfile.value.preferences.length} prefs · ${parsedSoulLearnedProfile.value.terms.length} terms`
+      : debugSoulLearnedContext.value
+        ? 'learned context available'
+        : 'no learned soul yet',
+    open: true,
+  },
+  {
+    key: 'observed-signals',
+    title: 'Observed Signals',
+    summary: parsedSoulSignals.value
+      ? `${parsedSoulSignals.value.totalCount} observed · ${parsedSoulSignals.value.matureCount} mature`
+      : 'no observed signals yet',
+    open: true,
+  },
+  {
+    key: 'knowledge',
+    title: 'Knowledge',
+    summary: debugKnowledgeContext.value
+      ? `${debugKnowledgeChunks.value.length} chunks packed`
+      : 'no knowledge context',
+    open: false,
+  },
+  {
+    key: 'model',
+    title: 'Model I/O',
+    summary: debugSanitizedCompletion.value
+      ? `${debugSanitizedCompletion.value.length} completion chars`
+      : 'no completion payload',
+    open: false,
+  },
+  {
+    key: 'raw',
+    title: 'Raw payloads',
+    summary: 'full prompts, timings, telemetry, and raw choice',
+    open: false,
+  },
+])
 const knowledgeHighlights = computed(() => {
   const knowledgeLayer = parsedPromptLayers.value?.knowledge
   const budget = knowledgeLayer?.budget ?? parsedKnowledgeBudget.value
@@ -256,21 +351,6 @@ const parsedSoulBudget = computed(() => {
   catch {
     return null
   }
-})
-const soulBudgetSummary = computed(() => {
-  const budget = parsedPromptLayers.value?.soul?.budget ?? parsedSoulBudget.value
-  if (budget === null || budget === undefined) {
-    return []
-  }
-
-  return [
-    ['Budget', `${budget.usedChars} / ${budget.totalChars} chars`],
-    ['Reserved', `${budget.reservedChars} chars`],
-    ['Truncated', budget.truncated ? 'yes' : 'no'],
-    ['Included', budget.includedBlocks.join(', ') || 'none'],
-    ['Dropped', budget.droppedBlocks.join(', ') || 'none'],
-    ['Trimmed', budget.trimmedBlocks.map(item => item.label).join(', ') || 'none'],
-  ]
 })
 
 const debouncedRequest = debounce(() => {
@@ -747,6 +827,12 @@ function assignDebugState(debug: CompletionResponse['debug']) {
     ? JSON.stringify(debug.appliedStrategy, null, 2)
     : ''
   debugSoulContext.value = debug?.soulContext ?? ''
+  debugSoulExplicitContext.value = debug?.soulExplicitContext ?? ''
+  debugSoulLearnedContext.value = debug?.soulLearnedContext ?? ''
+  debugSoulLearnedProfile.value = debug?.soulLearnedProfile
+    ? JSON.stringify(debug.soulLearnedProfile, null, 2)
+    : ''
+  debugSoulObservedSignalCount.value = debug?.soulObservedSignalCount ?? 0
   debugSoulEnabled.value = debug?.soulEnabled ?? false
   debugSoulConfigured.value = debug?.soulConfigured ?? false
   debugSoulCharCount.value = debug?.soulCharCount ?? 0
@@ -778,6 +864,10 @@ function clearDebugState() {
   debugSoulSignals.value = ''
   debugAppliedStrategy.value = ''
   debugSoulContext.value = ''
+  debugSoulExplicitContext.value = ''
+  debugSoulLearnedContext.value = ''
+  debugSoulLearnedProfile.value = ''
+  debugSoulObservedSignalCount.value = 0
   debugSoulEnabled.value = false
   debugSoulConfigured.value = false
   debugSoulCharCount.value = 0
@@ -972,12 +1062,6 @@ function openOptions() {
                   }}
                 </dd>
               </div>
-              <div v-for="[label, value] in soulBudgetSummary" :key="label">
-                <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  {{ label }}
-                </dt>
-                <dd class="mt-1 text-neutral-800">{{ value }}</dd>
-              </div>
             </dl>
           </div>
 
@@ -1000,7 +1084,7 @@ function openOptions() {
             </div>
           </div>
 
-          <div class="grid gap-4 sm:grid-cols-2">
+          <div class="grid gap-4 lg:grid-cols-4">
             <div class="card">
               <h2 class="mb-4 text-base font-semibold">Soul snapshot</h2>
               <dl class="space-y-3 text-sm">
@@ -1017,7 +1101,22 @@ function openOptions() {
             </div>
 
             <div class="card">
-              <h2 class="mb-4 text-base font-semibold">Soul signals</h2>
+              <h2 class="mb-4 text-base font-semibold">Learned Soul</h2>
+              <dl class="space-y-3 text-sm">
+                <div v-for="item in learnedSoulHighlights" :key="item.label">
+                  <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                    {{ item.label }}
+                  </dt>
+                  <dd class="mt-1 text-neutral-800">{{ item.value }}</dd>
+                </div>
+                <div v-if="learnedSoulHighlights.length === 0" class="text-sm text-neutral-400">
+                  No learned Soul data yet.
+                </div>
+              </dl>
+            </div>
+
+            <div class="card">
+              <h2 class="mb-4 text-base font-semibold">Observed signals</h2>
               <dl class="space-y-3 text-sm">
                 <div v-for="item in soulSignalHighlights" :key="item.label">
                   <dt class="text-xs font-semibold uppercase tracking-wide text-neutral-500">
@@ -1134,146 +1233,217 @@ function openOptions() {
           </div>
 
           <div class="card">
-            <h2 class="mb-4 text-base font-semibold">Debug preview</h2>
-            <div class="space-y-4">
+            <div class="mb-4 flex items-center justify-between gap-3">
               <div>
-                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Prefix
-                </div>
-                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ previewPrefix || '(empty)' }}</pre>
+                <h2 class="text-base font-semibold">Debug console</h2>
+                <p class="mt-1 text-xs text-neutral-500">
+                  Summary-first layout. Expand raw payloads only when you need them.
+                </p>
               </div>
-              <div>
-                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Suffix
-                </div>
-                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ previewSuffix || '(empty)' }}</pre>
+              <div class="rounded-full bg-neutral-100 px-3 py-1 text-xs font-medium text-neutral-600">
+                {{ debugSections.length }} sections
               </div>
-              <div v-if="errorText">
-                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-rose-600">
-                  Error
-                </div>
-                <pre class="overflow-auto rounded-md bg-rose-50 p-3 text-xs text-rose-700">{{ errorText }}</pre>
+            </div>
+
+            <div v-if="errorText || blockedReason || infoText" class="mb-4 grid gap-3 md:grid-cols-3">
+              <div v-if="errorText" class="rounded-xl border border-rose-200 bg-rose-50 p-3">
+                <div class="mb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-rose-700">Error</div>
+                <p class="text-sm text-rose-800">{{ errorText }}</p>
               </div>
-              <div v-if="blockedReason">
-                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-700">
-                  Blocked reason
-                </div>
-                <pre class="overflow-auto rounded-md bg-amber-50 p-3 text-xs text-amber-800">{{ blockedReason }}</pre>
+              <div v-if="blockedReason" class="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                <div class="mb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-700">Blocked</div>
+                <p class="text-sm text-amber-800">{{ blockedReason }}</p>
               </div>
-              <div v-if="infoText">
-                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-sky-700">
-                  Last info
-                </div>
-                <pre class="overflow-auto rounded-md bg-sky-50 p-3 text-xs text-sky-800">{{ infoText }}</pre>
+              <div v-if="infoText" class="rounded-xl border border-sky-200 bg-sky-50 p-3">
+                <div class="mb-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-sky-700">Info</div>
+                <p class="text-sm text-sky-800">{{ infoText }}</p>
               </div>
-              <div>
-                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Applied strategy
+            </div>
+
+            <div class="space-y-3">
+              <details
+                v-for="section in debugSections"
+                :key="section.key"
+                class="group overflow-hidden rounded-xl border border-neutral-200 bg-white"
+                :open="section.open"
+              >
+                <summary class="flex cursor-pointer list-none items-center justify-between gap-4 bg-neutral-50 px-4 py-3">
+                  <div>
+                    <div class="text-sm font-semibold text-neutral-900">{{ section.title }}</div>
+                    <div class="mt-0.5 text-xs text-neutral-500">{{ section.summary }}</div>
+                  </div>
+                  <div class="text-xs font-medium text-neutral-400 transition group-open:rotate-90">›</div>
+                </summary>
+
+                <div v-if="section.key === 'prompt'" class="grid gap-4 border-t border-neutral-200 p-4">
+                  <div>
+                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Prefix</div>
+                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ previewPrefix || '(empty)' }}</pre>
+                  </div>
+                  <div>
+                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Suffix</div>
+                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ previewSuffix || '(empty)' }}</pre>
+                  </div>
+                  <div>
+                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Applied strategy</div>
+                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugAppliedStrategy || '(empty)' }}</pre>
+                  </div>
+                  <div>
+                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Prompt layers</div>
+                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugPromptLayers || '(empty)' }}</pre>
+                  </div>
                 </div>
-                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugAppliedStrategy || '(empty)' }}</pre>
-              </div>
-              <div>
-                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Prompt layers
+
+                <div v-else-if="section.key === 'soul'" class="grid gap-4 border-t border-neutral-200 p-4">
+                  <div class="grid gap-3 sm:grid-cols-3">
+                    <div class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                      <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Projection</div>
+                      <div class="mt-1 text-sm text-neutral-900">{{ debugSoulEnabled ? 'active' : debugSoulConfigured ? 'configured but empty' : 'disabled' }}</div>
+                    </div>
+                    <div class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                      <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Projected chars</div>
+                      <div class="mt-1 text-sm text-neutral-900">{{ debugSoulCharCount }}</div>
+                    </div>
+                    <div class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                      <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Included blocks</div>
+                      <div class="mt-1 text-sm text-neutral-900">{{ parsedSoulBudget?.includedBlocks.join(', ') || 'none' }}</div>
+                    </div>
+                  </div>
+                  <div>
+                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Explicit soul context</div>
+                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulExplicitContext || '(empty)' }}</pre>
+                  </div>
+                  <div>
+                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Merged soul context</div>
+                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulContext || '(empty)' }}</pre>
+                  </div>
+                  <div>
+                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Soul budget</div>
+                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulBudget || '(empty)' }}</pre>
+                  </div>
                 </div>
-                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugPromptLayers || '(empty)' }}</pre>
-              </div>
-              <div>
-                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Soul signals
+
+                <div v-else-if="section.key === 'learned-soul'" class="grid gap-4 border-t border-neutral-200 p-4">
+                  <div class="grid gap-3 sm:grid-cols-3">
+                    <div class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                      <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Preferences</div>
+                      <div class="mt-1 text-sm text-neutral-900">{{ parsedSoulLearnedProfile?.preferences.length ?? 0 }}</div>
+                    </div>
+                    <div class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                      <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Avoidances</div>
+                      <div class="mt-1 text-sm text-neutral-900">{{ parsedSoulLearnedProfile?.avoidances.length ?? 0 }}</div>
+                    </div>
+                    <div class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                      <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Terms</div>
+                      <div class="mt-1 text-sm text-neutral-900">{{ parsedSoulLearnedProfile?.terms.length ?? 0 }}</div>
+                    </div>
+                  </div>
+                  <div>
+                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Learned soul context</div>
+                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulLearnedContext || '(empty)' }}</pre>
+                  </div>
+                  <div>
+                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Learned soul profile</div>
+                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulLearnedProfile || '(empty)' }}</pre>
+                  </div>
                 </div>
-                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulSignals || '(empty)' }}</pre>
-              </div>
-              <div>
-                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Soul context
+
+                <div v-else-if="section.key === 'observed-signals'" class="grid gap-4 border-t border-neutral-200 p-4">
+                  <div class="grid gap-3 sm:grid-cols-3">
+                    <div class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                      <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Observed</div>
+                      <div class="mt-1 text-sm text-neutral-900">{{ debugSoulObservedSignalCount }}</div>
+                    </div>
+                    <div class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                      <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Mature</div>
+                      <div class="mt-1 text-sm text-neutral-900">{{ parsedSoulSignals?.matureCount ?? 0 }}</div>
+                    </div>
+                    <div class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                      <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Top signal</div>
+                      <div class="mt-1 text-sm text-neutral-900">{{ parsedSoulSignals?.signals[0] ? `${parsedSoulSignals.signals[0].kind}:${parsedSoulSignals.signals[0].value}` : 'none' }}</div>
+                    </div>
+                  </div>
+                  <div>
+                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Soul signals</div>
+                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulSignals || '(empty)' }}</pre>
+                  </div>
                 </div>
-                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulContext || '(empty)' }}</pre>
-              </div>
-              <div>
-                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Soul budget
+
+                <div v-else-if="section.key === 'knowledge'" class="grid gap-4 border-t border-neutral-200 p-4">
+                  <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <div class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                      <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Query</div>
+                      <div class="mt-1 text-sm text-neutral-900">{{ debugKnowledgeQuery || 'none' }}</div>
+                    </div>
+                    <div class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                      <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Packed chunks</div>
+                      <div class="mt-1 text-sm text-neutral-900">{{ debugKnowledgeChunks.length }}</div>
+                    </div>
+                    <div class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                      <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Budget</div>
+                      <div class="mt-1 text-sm text-neutral-900">{{ knowledgeBudgetSummary[0]?.[1] ?? 'n/a' }}</div>
+                    </div>
+                    <div class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
+                      <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Recall</div>
+                      <div class="mt-1 text-sm text-neutral-900">{{ debugKnowledgeRecall ? 'available' : 'none' }}</div>
+                    </div>
+                  </div>
+                  <div>
+                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Knowledge context</div>
+                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeContext || '(empty)' }}</pre>
+                  </div>
+                  <div>
+                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Knowledge budget</div>
+                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeBudget || '(empty)' }}</pre>
+                  </div>
+                  <div>
+                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Knowledge recall</div>
+                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeRecall || '(empty)' }}</pre>
+                  </div>
+                  <div>
+                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Knowledge rerank</div>
+                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeRerank || '(empty)' }}</pre>
+                  </div>
+                  <div>
+                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Knowledge chunks</div>
+                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeChunks.length ? JSON.stringify(debugKnowledgeChunks, null, 2) : '(empty)' }}</pre>
+                  </div>
                 </div>
-                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulBudget || '(empty)' }}</pre>
-              </div>
-              <div>
-                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Knowledge query
+
+                <div v-else-if="section.key === 'model'" class="grid gap-4 border-t border-neutral-200 p-4">
+                  <div>
+                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Sanitized completion</div>
+                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSanitizedCompletion || '(empty)' }}</pre>
+                  </div>
+                  <div>
+                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Raw completion</div>
+                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugRawCompletion || '(empty)' }}</pre>
+                  </div>
                 </div>
-                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeQuery || '(empty)' }}</pre>
-              </div>
-              <div>
-                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Knowledge budget
+
+                <div v-else class="grid gap-4 border-t border-neutral-200 p-4">
+                  <div>
+                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Timings</div>
+                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugTimings || '(empty)' }}</pre>
+                  </div>
+                  <div>
+                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Telemetry</div>
+                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugTelemetry || '(empty)' }}</pre>
+                  </div>
+                  <div>
+                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Raw choice</div>
+                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugRawChoice || '(empty)' }}</pre>
+                  </div>
+                  <div>
+                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">User prompt</div>
+                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugUserPrompt || '(empty)' }}</pre>
+                  </div>
+                  <div>
+                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">System prompt</div>
+                    <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSystemPrompt || '(empty)' }}</pre>
+                  </div>
                 </div>
-                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeBudget || '(empty)' }}</pre>
-              </div>
-              <div>
-                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Knowledge recall
-                </div>
-                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeRecall || '(empty)' }}</pre>
-              </div>
-              <div>
-                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Knowledge rerank
-                </div>
-                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeRerank || '(empty)' }}</pre>
-              </div>
-              <div>
-                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Knowledge context
-                </div>
-                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeContext || '(empty)' }}</pre>
-              </div>
-              <div>
-                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Knowledge chunks
-                </div>
-                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugKnowledgeChunks.length ? JSON.stringify(debugKnowledgeChunks, null, 2) : '(empty)' }}</pre>
-              </div>
-              <div>
-                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Timings
-                </div>
-                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugTimings || '(empty)' }}</pre>
-              </div>
-              <div>
-                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Telemetry
-                </div>
-                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugTelemetry || '(empty)' }}</pre>
-              </div>
-              <div>
-                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Raw choice
-                </div>
-                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugRawChoice || '(empty)' }}</pre>
-              </div>
-              <div>
-                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Raw completion
-                </div>
-                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugRawCompletion || '(empty)' }}</pre>
-              </div>
-              <div>
-                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  Sanitized completion
-                </div>
-                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSanitizedCompletion || '(empty)' }}</pre>
-              </div>
-              <div>
-                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  User prompt
-                </div>
-                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugUserPrompt || '(empty)' }}</pre>
-              </div>
-              <div>
-                <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">
-                  System prompt
-                </div>
-                <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSystemPrompt || '(empty)' }}</pre>
-              </div>
+              </details>
             </div>
           </div>
         </section>
