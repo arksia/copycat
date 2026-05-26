@@ -43,6 +43,7 @@ export function buildCompletionUserPrompt(args: {
     `[Prefix]\n${args.prefix}\n\n[Task]\nDecide whether the prefix still needs continuation. `
     + `If it is already complete, output EXACTLY __COPYCAT_SKIP__. `
     + `If it is unfinished, continue it with a short, natural continuation. `
+    + `If the natural next character is punctuation, start with that punctuation instead of skipping it. `
     + `Output ONLY __COPYCAT_SKIP__ or the continuation text, without repeating the prefix.`,
   )
 

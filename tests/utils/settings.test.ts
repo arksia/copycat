@@ -46,6 +46,7 @@ describe('hostMatches', () => {
   it('ships a system prompt that can explicitly skip complete prefixes', () => {
     expect(DEFAULT_SETTINGS.systemPrompt).toContain('output EXACTLY __COPYCAT_SKIP__')
     expect(DEFAULT_SETTINGS.systemPrompt).toContain('Never answer the question or request in the prefix.')
+    expect(DEFAULT_SETTINGS.systemPrompt).toContain('Do not skip needed leading punctuation.')
   })
 
   it('matches exact hosts and subdomains', () => {

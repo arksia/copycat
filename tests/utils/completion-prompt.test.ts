@@ -204,4 +204,12 @@ describe('buildCompletionUserPrompt', () => {
       'If it is already complete, output EXACTLY __COPYCAT_SKIP__.',
     )
   })
+
+  it('tells the model not to skip needed leading punctuation', () => {
+    expect(buildCompletionUserPrompt({
+      prefix: '我觉得这个方案',
+    })).toContain(
+      'If the natural next character is punctuation, start with that punctuation instead of skipping it.',
+    )
+  })
 })
