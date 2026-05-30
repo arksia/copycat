@@ -212,4 +212,13 @@ describe('buildCompletionUserPrompt', () => {
       'If the natural next character is punctuation, start with that punctuation instead of skipping it.',
     )
   })
+
+  it('keeps task-scoped continuation constraints in the user prompt', () => {
+    expect(buildCompletionUserPrompt({
+      prefix: '我觉得这个方案',
+    })).toContain('continue it with ONE short, natural continuation in the SAME language as the prefix.')
+    expect(buildCompletionUserPrompt({
+      prefix: '我觉得这个方案',
+    })).toContain('Keep it short: a few words up to one sentence.')
+  })
 })

@@ -43,10 +43,11 @@ afterEach(() => {
 })
 
 describe('hostMatches', () => {
-  it('ships a system prompt that can explicitly skip complete prefixes', () => {
-    expect(DEFAULT_SETTINGS.systemPrompt).toContain('output EXACTLY __COPYCAT_SKIP__')
+  it('ships a system prompt with only global continuation rules', () => {
     expect(DEFAULT_SETTINGS.systemPrompt).toContain('Never answer the question or request in the prefix.')
-    expect(DEFAULT_SETTINGS.systemPrompt).toContain('Do not skip needed leading punctuation.')
+    expect(DEFAULT_SETTINGS.systemPrompt).toContain('Output ONLY the requested result')
+    expect(DEFAULT_SETTINGS.systemPrompt).not.toContain('__COPYCAT_SKIP__')
+    expect(DEFAULT_SETTINGS.systemPrompt).not.toContain('Do not skip needed leading punctuation.')
   })
 
   it('matches exact hosts and subdomains', () => {
