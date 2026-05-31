@@ -1,9 +1,9 @@
+import type { SoulBlock } from './profile'
 import type {
   DistilledSoulCue,
   LearnedSoulProfile,
   SoulObservedSignal,
 } from '~/types'
-import type { SoulBlock } from './profile'
 
 export function distillSoulSignals(
   signals: SoulObservedSignal[],
@@ -52,6 +52,21 @@ export function distillSoulSignals(
       cues.push({
         kind: 'term',
         value: term,
+        sourceSignalIds: [signal.id],
+        confidence: signal.confidence,
+      })
+      continue
+    }
+
+    if (signal.kind === 'structure') {
+      const value = resolveStructureCue(signal.value)
+      if (value === null) {
+        continue
+      }
+      profile.preferences.push(value)
+      cues.push({
+        kind: 'preference',
+        value,
         sourceSignalIds: [signal.id],
         confidence: signal.confidence,
       })
@@ -106,4 +121,20 @@ export function buildLearnedSoulBlocks(profile: LearnedSoulProfile): SoulBlock[]
 
 function uniqueStrings(values: string[]): string[] {
   return [...new Set(values.map(value => value.trim()).filter(Boolean))]
+}
+
+function resolveStructureCue(value: string): string | null {
+  if (value === 'answer-first') {
+    return 'Lead with the answer before adding context.'
+  }
+
+  if (value === 'list-first') {
+    return 'Use a list-first structure when the prefix asks for multiple items.'
+  }
+
+  if (value === 'context-first') {
+    return 'Add brief context before the answer when setup matters.'
+  }
+
+  return null
 }

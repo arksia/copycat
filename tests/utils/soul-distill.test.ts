@@ -1,6 +1,6 @@
+import type { SoulObservedSignal } from '~/types'
 import { describe, expect, it } from 'vitest'
 import { distillSoulSignals } from '~/soul'
-import type { SoulObservedSignal } from '~/types'
 
 function buildSignal(overrides: Partial<SoulObservedSignal> & Pick<SoulObservedSignal, 'id' | 'kind' | 'value'>): SoulObservedSignal {
   return {
@@ -74,5 +74,26 @@ describe('distillSoulSignals', () => {
     ])
 
     expect(result.profile.terms).toEqual(['rag'])
+  })
+
+  it('distills observed structure signals into learned preferences', () => {
+    const result = distillSoulSignals([
+      buildSignal({
+        id: 'signal-1',
+        kind: 'structure',
+        value: 'list-first',
+      }),
+      buildSignal({
+        id: 'signal-2',
+        kind: 'structure',
+        value: 'context-first',
+      }),
+    ])
+
+    expect(result.profile.preferences).toEqual([
+      'Use a list-first structure when the prefix asks for multiple items.',
+      'Add brief context before the answer when setup matters.',
+    ])
+    expect(result.cues).toHaveLength(2)
   })
 })

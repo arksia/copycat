@@ -130,7 +130,7 @@ export async function getSoulObservedSignalSnapshot(
 export function isSoulObservedSignalMature(signal: SoulObservedSignal): boolean {
   return signal.count >= 3
     && signal.distinctContextCount >= 2
-    && signal.acceptedCount > signal.rejectedCount
+    && computeSoulSignalSupport(signal) > 0
 }
 
 function createInitialSoulObservedSignal(args: UpsertSoulObservedSignalArgs): SoulObservedSignal {
@@ -180,9 +180,17 @@ function computeSoulSignalConfidence(signal: SoulObservedSignal): number {
     return 0
   }
 
-  const acceptanceBias = (signal.acceptedCount - signal.rejectedCount) / signal.count
+  const supportBias = computeSoulSignalSupport(signal) / signal.count
   const contextBias = Math.min(signal.distinctContextCount / 3, 1)
-  return Number(Math.max(0, Math.min(1, (acceptanceBias * 0.7) + (contextBias * 0.3))).toFixed(2))
+  return Number(Math.max(0, Math.min(1, (supportBias * 0.7) + (contextBias * 0.3))).toFixed(2))
+}
+
+function computeSoulSignalSupport(signal: SoulObservedSignal): number {
+  if (signal.kind === 'avoidance') {
+    return signal.rejectedCount - signal.acceptedCount
+  }
+
+  return signal.acceptedCount - signal.rejectedCount
 }
 
 async function listSoulObservedSignalsByRecency(limit: number): Promise<SoulObservedSignal[]> {

@@ -10,10 +10,13 @@ import type {
   KnowledgeSearchRequest,
   ProviderId,
   Settings,
+  SoulObservedSignalSnapshot,
 } from '~/types'
 import type { DiscoveredModel } from '~/utils/providers/openai-compatible'
 import { computed, onMounted, ref, watch } from 'vue'
-import { sendRuntimeMessage } from '~/utils/runtime'
+import { buildSoulContext } from '~/soul'
+import { loadTelemetrySnapshot } from '~/utils/completion/telemetry'
+import { PROVIDER_ORDER, PROVIDER_PRESETS, resolveProviderPreset } from '~/utils/providers'
 import {
   buildModelsUrl,
   buildOpenAICompatibleHeaders,
@@ -21,16 +24,14 @@ import {
   joinOpenAICompatibleUrl,
   parseModelListResponse,
 } from '~/utils/providers/openai-compatible'
-import { PROVIDER_ORDER, PROVIDER_PRESETS, resolveProviderPreset } from '~/utils/providers'
+import { sendRuntimeMessage } from '~/utils/runtime'
 import {
+  buildDefaultSettings,
   DEFAULT_SETTINGS,
   DEFAULT_SYSTEM_PROMPT,
-  buildDefaultSettings,
   loadSettings,
   saveSettings,
 } from '~/utils/settings'
-import { loadTelemetrySnapshot } from '~/utils/completion/telemetry'
-import { buildSoulContext } from '~/soul'
 
 const DEFAULT_KB_ID = 'default'
 
@@ -56,12 +57,16 @@ const telemetryEvents = ref<CompletionEvent[]>([])
 const telemetryStats = ref<CompletionEventStats | null>(null)
 const telemetryError = ref('')
 const loadingTelemetry = ref(false)
+const soulSignals = ref<SoulObservedSignalSnapshot | null>(null)
+const soulSignalsError = ref('')
+const loadingSoulSignals = ref(false)
 
 const provider = computed(() => resolveProviderPreset(settings.value.provider))
 const soulPreview = computed(() => buildSoulContext({
   enabled: settings.value.soul.enabled,
   explicit: settings.value.soul.profile,
 }))
+const matureSoulSignals = computed(() => soulSignals.value?.signals ?? [])
 
 onMounted(async () => {
   try {
@@ -69,6 +74,7 @@ onMounted(async () => {
     settings.value = stored
     hostsText.value = stored.enabledHosts.join('\n')
     await reloadKnowledgeDocuments()
+    await reloadSoulSignals()
   }
   catch (error) {
     loadError.value
@@ -254,6 +260,27 @@ async function reloadTelemetry() {
   }
   finally {
     loadingTelemetry.value = false
+  }
+}
+
+async function reloadSoulSignals() {
+  loadingSoulSignals.value = true
+  soulSignalsError.value = ''
+
+  try {
+    soulSignals.value = await sendRuntimeMessage<SoulObservedSignalSnapshot>({
+      type: 'soul/signals',
+      payload: {
+        limit: 12,
+        matureOnly: true,
+      },
+    })
+  }
+  catch (error) {
+    soulSignalsError.value = error instanceof Error ? error.message : String(error)
+  }
+  finally {
+    loadingSoulSignals.value = false
   }
 }
 
@@ -613,6 +640,76 @@ async function runKnowledgeSearch() {
         <div class="mt-4">
           <div class="mb-2 text-sm font-medium text-neutral-700">Projected Soul Preview</div>
           <pre class="overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ soulPreview || '(empty)' }}</pre>
+        </div>
+
+        <div class="mt-4 rounded-xl border border-neutral-200 p-4">
+          <div class="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <div class="text-sm font-medium text-neutral-700">Learned Soul Memory</div>
+              <p class="mt-1 text-xs text-neutral-500">
+                Mature local signals inferred from accepted and rejected completions.
+              </p>
+            </div>
+            <button class="btn-ghost" :disabled="loadingSoulSignals" @click="reloadSoulSignals">
+              {{ loadingSoulSignals ? 'Refreshing…' : 'Refresh' }}
+            </button>
+          </div>
+
+          <div v-if="soulSignalsError" class="mb-3 text-sm text-rose-600">
+            {{ soulSignalsError }}
+          </div>
+
+          <div v-if="soulSignals" class="mb-3 grid grid-cols-2 gap-3">
+            <div class="rounded-lg border border-neutral-200 px-3 py-2">
+              <div class="text-xs text-neutral-500">Mature signals</div>
+              <div class="mt-1 text-lg font-semibold">{{ soulSignals.matureCount }}</div>
+            </div>
+            <div class="rounded-lg border border-neutral-200 px-3 py-2">
+              <div class="text-xs text-neutral-500">Displayed</div>
+              <div class="mt-1 text-lg font-semibold">{{ matureSoulSignals.length }}</div>
+            </div>
+          </div>
+
+          <div v-if="matureSoulSignals.length" class="space-y-3">
+            <div
+              v-for="signal in matureSoulSignals"
+              :key="signal.id"
+              class="rounded-lg border border-neutral-200 px-3 py-3"
+            >
+              <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
+                <div class="flex flex-wrap items-center gap-2">
+                  <span class="rounded-full bg-neutral-100 px-2 py-0.5 text-xs font-medium text-neutral-700">
+                    {{ signal.kind }}
+                  </span>
+                  <code class="rounded bg-neutral-50 px-1.5 py-0.5 text-xs text-neutral-800">
+                    {{ signal.value }}
+                  </code>
+                </div>
+                <span class="text-xs text-neutral-500">
+                  confidence {{ Math.round(signal.confidence * 100) }}%
+                </span>
+              </div>
+
+              <div class="grid grid-cols-2 gap-2 text-xs text-neutral-600 md:grid-cols-4">
+                <div>accepted {{ signal.acceptedCount }}</div>
+                <div>rejected {{ signal.rejectedCount }}</div>
+                <div>ignored {{ signal.ignoredCount }}</div>
+                <div>contexts {{ signal.distinctContextCount }}</div>
+              </div>
+
+              <div class="mt-3 text-xs text-neutral-500">
+                Last evidence from
+                <code class="rounded bg-neutral-100 px-1 py-0.5">{{ signal.evidence.host }}</code>
+              </div>
+              <p class="mt-2 whitespace-pre-wrap rounded bg-neutral-50 px-2 py-1 font-mono text-xs text-neutral-700">
+                {{ signal.evidence.suggestionPreview || '(empty suggestion)' }}
+              </p>
+            </div>
+          </div>
+
+          <p v-else class="text-sm text-neutral-500">
+            No mature learned Soul signals yet. Accept or reject similar suggestions across contexts to build memory.
+          </p>
         </div>
       </section>
 

@@ -1,18 +1,8 @@
 import type { CompletionEvent, SoulObservedSignal } from '~/types'
 import { afterEach, describe, expect, it } from 'vitest'
-import { deleteCopycatDb } from '~/utils/storage/client'
 import {
-  getPersistedCompletion,
-  putPersistedCompletion,
-} from '~/utils/storage/repositories/completions'
-import {
-  getCompletionEventStats,
-  listRecentCompletionEventsByHost,
-  putCompletionEvent,
-} from '~/utils/storage/repositories/events'
-import {
-  listKnowledgeDocuments,
   listKnowledgeChunksByDocumentIds,
+  listKnowledgeDocuments,
   putKnowledgeChunks,
   putKnowledgeDocument,
   searchKnowledgeChunks,
@@ -23,6 +13,16 @@ import {
   putSoulObservedSignal,
   upsertSoulObservedSignal,
 } from '~/soul'
+import { deleteCopycatDb } from '~/utils/storage/client'
+import {
+  getPersistedCompletion,
+  putPersistedCompletion,
+} from '~/utils/storage/repositories/completions'
+import {
+  getCompletionEventStats,
+  listRecentCompletionEventsByHost,
+  putCompletionEvent,
+} from '~/utils/storage/repositories/events'
 
 afterEach(async () => {
   await deleteCopycatDb()
@@ -283,6 +283,25 @@ describe('indexeddb repositories', () => {
     expect(snapshot.signals.map(signal => signal.id)).toEqual(['signal-1'])
   })
 
+  it('treats rejected avoidance signals as mature support', async () => {
+    await putSoulObservedSignal(buildStoredSoulSignal({
+      id: 'signal-1',
+      kind: 'avoidance',
+      value: 'avoid-marketing-language',
+      count: 3,
+      acceptedCount: 0,
+      rejectedCount: 2,
+      ignoredCount: 1,
+      distinctContextCount: 2,
+      lastSeenAt: 200,
+    }))
+
+    const snapshot = await getSoulObservedSignalSnapshot({ matureOnly: true })
+
+    expect(snapshot.matureCount).toBe(1)
+    expect(snapshot.signals.map(signal => signal.id)).toEqual(['signal-1'])
+  })
+
   it('stores knowledge documents and searches chunks inside one knowledge base', async () => {
     await putKnowledgeDocument({
       id: 'doc-1',
@@ -343,15 +362,11 @@ describe('indexeddb repositories', () => {
       },
     ])
 
-    expect(await listKnowledgeDocuments('default')).toEqual([
-      expect.objectContaining({
-        id: 'doc-1',
-        title: 'Virtual List Notes',
-        embedding: expect.objectContaining({
-          model: 'test-model',
-        }),
-      }),
-    ])
+    const documents = await listKnowledgeDocuments('default')
+    expect(documents).toHaveLength(1)
+    expect(documents[0]?.id).toBe('doc-1')
+    expect(documents[0]?.title).toBe('Virtual List Notes')
+    expect(documents[0]?.embedding?.model).toBe('test-model')
 
     const result = await searchKnowledgeChunks({
       kbId: 'default',

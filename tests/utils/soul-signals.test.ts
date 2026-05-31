@@ -57,6 +57,22 @@ describe('deriveSoulObservedSignals', () => {
     expect(tags.map(tag => `${tag.kind}:${tag.value}`)).toContain('term:term:retrieval')
   })
 
+  it('extracts non-answer opening structures', () => {
+    const tags = deriveSoulObservedSignals({
+      event: {
+        id: 'evt-4',
+        prefix: '列出三个取舍',
+        suggestion: '- 简单优先\n- 保持可验证',
+        action: 'accepted',
+        latencyMs: 100,
+        timestamp: 350,
+        host: 'chatgpt.com',
+      },
+    })
+
+    expect(tags.map(tag => `${tag.kind}:${tag.value}`)).toContain('structure:list-first')
+  })
+
   it('extracts repeated han terms shared by prefix and suggestion', () => {
     const evidence = buildSoulSignalEvidence({
       id: 'evt-4',

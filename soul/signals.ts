@@ -33,10 +33,10 @@ export function deriveSoulObservedSignals(
   const contextKey = buildSoulSignalContextKey(args.event)
   const tags: DerivedSoulSignalTag[] = []
 
-  if (evidence.openingStructure === 'answer-first') {
+  if (evidence.openingStructure !== 'unknown') {
     tags.push({
       kind: 'structure',
-      value: 'answer-first',
+      value: evidence.openingStructure,
       evidence,
       contextKey,
       documentIds: args.documentIds ?? [],
@@ -127,11 +127,11 @@ function detectOpeningStructure(
     return 'list-first'
   }
 
-  if (/^(first|start|directly|先|直接|结论)/i.test(trimmed)) {
+  if (/^(?:first|start|directly|先|直接|结论)/i.test(trimmed)) {
     return 'answer-first'
   }
 
-  if (/^(because|context|背景|为了)/i.test(trimmed)) {
+  if (/^(?:because|context|背景|为了)/i.test(trimmed)) {
     return 'context-first'
   }
 
@@ -142,15 +142,15 @@ function detectToneHints(text: string): string[] {
   const trimmed = text.trim()
   const hints: string[] = []
 
-  if (/[!！]/.test(trimmed) || /\b(amazing|best|powerful|incredible)\b/i.test(trimmed)) {
+  if (/[!！]/.test(trimmed) || /\b(?:amazing|best|powerful|incredible)\b/i.test(trimmed)) {
     hints.push('marketing-like')
   }
 
-  if (/^(please|建议|可以|可考虑)/i.test(trimmed)) {
+  if (/^(?:please|建议|可以|可考虑)/i.test(trimmed)) {
     hints.push('soft')
   }
 
-  if (/^(first|start|directly|先|直接|结论)/i.test(trimmed)) {
+  if (/^(?:first|start|directly|先|直接|结论)/i.test(trimmed)) {
     hints.push('direct')
   }
 
@@ -168,7 +168,7 @@ function extractSoulTerms(text: string): string[] {
   const normalized = text.toLowerCase()
   const terms = new Set<string>()
 
-  const latinMatches = normalized.match(/[a-z][a-z0-9-]{1,}/g) ?? []
+  const latinMatches = normalized.match(/[a-z][a-z0-9-]+/g) ?? []
   for (const term of latinMatches) {
     if (term.length >= 3) {
       terms.add(term)
