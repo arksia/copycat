@@ -261,6 +261,20 @@ class CopycatFlowController {
     if (!snapshot) {
       return
     }
+    if (snapshot.eligible) {
+      const triggerDecision = evaluateCompletionTrigger({
+        prefix: snapshot.prefix,
+        now: Date.now(),
+        memory: this.triggerMemory,
+      })
+      if (!triggerDecision.allowed) {
+        this.logDebug('snapshot-skipped-trigger-policy', {
+          reason: triggerDecision.reason,
+          revision: snapshot.revision,
+        })
+        return
+      }
+    }
     this.logDebug('snapshot-updated', {
       eligible: snapshot.eligible,
       revision: snapshot.revision,
@@ -298,23 +312,6 @@ class CopycatFlowController {
         case 'REQUEST_COMPLETION': {
           if (!state.snapshot || !state.session || state.session.sessionId !== effect.sessionId) {
             break
-          }
-          if (effect.stage === 'fast') {
-            const triggerDecision = evaluateCompletionTrigger({
-              prefix: state.snapshot.prefix,
-              now: Date.now(),
-              memory: this.triggerMemory,
-            })
-            if (!triggerDecision.allowed) {
-              this.logDebug('request-skipped-trigger-policy', {
-                reason: triggerDecision.reason,
-              })
-              this.controller.dispatch({
-                sessionId: effect.sessionId,
-                type: 'REQUEST_SUPPRESSED',
-              })
-              break
-            }
           }
           const requestId = nextId('req')
           if (effect.stage === 'fast') {

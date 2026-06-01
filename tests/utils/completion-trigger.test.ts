@@ -13,7 +13,7 @@ describe('evaluateCompletionTrigger', () => {
     })).toEqual({ allowed: true })
   })
 
-  it('requires a normal prefix delta before retrying', () => {
+  it('requires enough delta before retrying', () => {
     const memory = createCompletionTriggerMemory()
     memory.lastRequestedPrefix = '我觉得这个问题'
 
@@ -21,13 +21,41 @@ describe('evaluateCompletionTrigger', () => {
       prefix: '我觉得这个问题很',
       now: 1000,
       memory,
+    })).toEqual({ allowed: false, reason: 'delta' })
+
+    expect(evaluateCompletionTrigger({
+      prefix: '我觉得这个问题很关键',
+      now: 1000,
+      memory,
+    })).toEqual({ allowed: true })
+  })
+
+  it('blocks the same prefix from re-requesting', () => {
+    const memory = createCompletionTriggerMemory()
+    memory.lastRequestedPrefix = '我觉得这个问题'
+
+    expect(evaluateCompletionTrigger({
+      prefix: '我觉得这个问题',
+      now: 1000,
+      memory,
     })).toEqual({
       allowed: false,
       reason: 'delta',
     })
+  })
+
+  it('allows a request after enough deletion (backspace)', () => {
+    const memory = createCompletionTriggerMemory()
+    memory.lastRequestedPrefix = '我觉得这个问题'
 
     expect(evaluateCompletionTrigger({
-      prefix: '我觉得这个问题很关键',
+      prefix: '我觉得这个问',
+      now: 1000,
+      memory,
+    })).toEqual({ allowed: false, reason: 'delta' })
+
+    expect(evaluateCompletionTrigger({
+      prefix: '我觉得这',
       now: 1000,
       memory,
     })).toEqual({ allowed: true })
@@ -40,7 +68,7 @@ describe('evaluateCompletionTrigger', () => {
     memory.lastSkipAt = 1000
 
     expect(evaluateCompletionTrigger({
-      prefix: '你觉得这个方案怎么样？如果',
+      prefix: '你觉得这个方案怎么样？如',
       now: 2000,
       memory,
     })).toEqual({
@@ -49,7 +77,7 @@ describe('evaluateCompletionTrigger', () => {
     })
 
     expect(evaluateCompletionTrigger({
-      prefix: '你觉得这个方案怎么样？如果我们还要兼顾延迟',
+      prefix: '你觉得这个方案怎么样？如果',
       now: 2000,
       memory,
     })).toEqual({ allowed: true })
@@ -62,7 +90,7 @@ describe('evaluateCompletionTrigger', () => {
 
     expect(evaluateCompletionTrigger({
       prefix: '请帮我总结一下这个 PR。',
-      now: 3500,
+      now: 3000,
       memory,
     })).toEqual({ allowed: true })
   })
@@ -75,7 +103,7 @@ describe('evaluateCompletionTrigger', () => {
 
     expect(memory).not.toHaveProperty('lastRequestAt')
     expect(evaluateCompletionTrigger({
-      prefix: '你觉得这个方案怎么样？如果我们还要兼顾延迟',
+      prefix: '你觉得这个方案怎么样？如果我们还要',
       now: 2000,
       memory,
     })).toEqual({ allowed: true })

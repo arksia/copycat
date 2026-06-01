@@ -57,7 +57,7 @@ export const DEFAULT_SETTINGS: Settings = {
   model: PROVIDER_PRESETS.groq.defaultModel,
   temperature: 0.2,
   maxTokens: 48,
-  debounceMs: 600,
+  debounceMs: 300,
   minPrefixChars: 3,
   systemPrompt: DEFAULT_SYSTEM_PROMPT,
   soul: {

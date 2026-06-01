@@ -201,7 +201,7 @@ describe('buildCompletionUserPrompt', () => {
     expect(buildCompletionUserPrompt({
       prefix: '你觉得这个方案怎么样？',
     })).toContain(
-      'If it is already complete, output EXACTLY __COPYCAT_SKIP__.',
+      'output EXACTLY __COPYCAT_SKIP__ instead',
     )
   })
 
@@ -216,7 +216,7 @@ describe('buildCompletionUserPrompt', () => {
   it('keeps task-scoped continuation constraints in the user prompt', () => {
     expect(buildCompletionUserPrompt({
       prefix: '我觉得这个方案',
-    })).toContain('continue it with ONE short, natural continuation in the SAME language as the prefix.')
+    })).toContain('Continue the prefix with ONE short, natural continuation in the SAME language as the prefix.')
     expect(buildCompletionUserPrompt({
       prefix: '我觉得这个方案',
     })).toContain('Keep it short: a few words up to one sentence.')

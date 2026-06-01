@@ -40,12 +40,11 @@ export function buildCompletionUserPrompt(args: {
   }
 
   userParts.push(
-    `[Prefix]\n${args.prefix}\n\n[Task]\nDecide whether the prefix still needs continuation. `
-    + `If it is already complete, output EXACTLY __COPYCAT_SKIP__. `
-    + `If it is unfinished, continue it with ONE short, natural continuation in the SAME language as the prefix. `
+    `[Prefix]\n${args.prefix}\n\n[Task]\nContinue the prefix with ONE short, natural continuation in the SAME language as the prefix. `
     + `If the natural next character is punctuation, start with that punctuation instead of skipping it. `
-    + `Output ONLY __COPYCAT_SKIP__ or the continuation text, without repeating the prefix. `
-    + `Keep it short: a few words up to one sentence.`,
+    + `Output ONLY the continuation text, without repeating the prefix. `
+    + `Keep it short: a few words up to one sentence. `
+    + `Only if the prefix is a fully self-contained finished message with nothing left to add, output EXACTLY __COPYCAT_SKIP__ instead.`,
   )
 
   if (args.suffix !== undefined && args.suffix.trim().length > 0) {
