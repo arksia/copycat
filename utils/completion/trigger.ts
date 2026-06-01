@@ -1,6 +1,6 @@
 export const DEFAULT_COMPLETION_RETRY_MIN_DELTA = 3
-export const DEFAULT_COMPLETION_SKIP_RETRY_MIN_DELTA = 6
-export const DEFAULT_COMPLETION_SKIP_COOLDOWN_MS = 2000
+export const DEFAULT_COMPLETION_SKIP_RETRY_MIN_DELTA = 2
+export const DEFAULT_COMPLETION_SKIP_COOLDOWN_MS = 1500
 
 export interface CompletionTriggerMemory {
   lastRequestedPrefix: string
@@ -53,7 +53,7 @@ export function evaluateCompletionTrigger(args: {
   }
 
   if (requestedPrefix.length > 0) {
-    const delta = normalizedPrefix.length - requestedPrefix.length
+    const delta = Math.abs(normalizedPrefix.length - requestedPrefix.length)
     if (delta < retryMinDelta) {
       return {
         allowed: false,
@@ -66,5 +66,5 @@ export function evaluateCompletionTrigger(args: {
 }
 
 export function normalizeCompletionPrefix(prefix: string): string {
-  return prefix.replace(/\s+/g, ' ').trim()
+  return prefix.replace(/\s+/g, ' ').trimStart()
 }
