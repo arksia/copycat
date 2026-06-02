@@ -108,4 +108,27 @@ describe('evaluateCompletionTrigger', () => {
       memory,
     })).toEqual({ allowed: true })
   })
+
+  it('allows a rewritten prefix immediately when it is no longer an extension of the last request', () => {
+    const memory = createCompletionTriggerMemory()
+    memory.lastRequestedPrefix = '我觉得这个问题'
+
+    expect(evaluateCompletionTrigger({
+      prefix: '我觉得这个方案',
+      now: 1000,
+      memory,
+    })).toEqual({ allowed: true })
+  })
+
+  it('allows a rewritten prefix immediately when it is no longer an extension of the last skipped prefix', () => {
+    const memory = createCompletionTriggerMemory()
+    memory.lastSkipPrefix = '请帮我总结一下这个 PR。'
+    memory.lastSkipAt = 1000
+
+    expect(evaluateCompletionTrigger({
+      prefix: '请帮我总结一下这个 issue。',
+      now: 1200,
+      memory,
+    })).toEqual({ allowed: true })
+  })
 })

@@ -45,6 +45,9 @@ afterEach(() => {
 describe('hostMatches', () => {
   it('ships a system prompt with only global continuation rules', () => {
     expect(DEFAULT_SETTINGS.systemPrompt).toContain('Never answer the question or request in the prefix.')
+    expect(DEFAULT_SETTINGS.systemPrompt).toContain('Only append continuation text to the same utterance.')
+    expect(DEFAULT_SETTINGS.systemPrompt).toContain('Never switch from continuation mode into assistant reply mode.')
+    expect(DEFAULT_SETTINGS.systemPrompt).toContain('If the continuation needs a connector or punctuation mark at the start, include it.')
     expect(DEFAULT_SETTINGS.systemPrompt).toContain('Output ONLY the requested result')
     expect(DEFAULT_SETTINGS.systemPrompt).not.toContain('__COPYCAT_SKIP__')
     expect(DEFAULT_SETTINGS.systemPrompt).not.toContain('Do not skip needed leading punctuation.')

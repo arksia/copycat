@@ -197,19 +197,31 @@ describe('buildCompletionUserPrompt', () => {
     )
   })
 
-  it('tells the model to emit the skip sentinel for complete prefixes', () => {
+  it('only allows skip when continuation would turn into a reply', () => {
     expect(buildCompletionUserPrompt({
       prefix: '你觉得这个方案怎么样？',
     })).toContain(
-      'output EXACTLY __COPYCAT_SKIP__ instead',
+      'Only output EXACTLY __COPYCAT_SKIP__ when you cannot continue naturally without turning the output into a reply instead of a continuation.',
     )
   })
 
-  it('tells the model not to skip needed leading punctuation', () => {
+  it('tells the model not to switch into assistant reply mode', () => {
+    expect(buildCompletionUserPrompt({
+      prefix: '你觉得这个方案怎么样？',
+    })).toContain('Do not switch roles from continuing the writer\'s text to replying as an assistant.')
+  })
+
+  it('tells the model not to react to or evaluate the prefix', () => {
+    expect(buildCompletionUserPrompt({
+      prefix: '我觉得这个方案怎么样，如果我们还要',
+    })).toContain('Do not answer, react to, evaluate, summarize, or give advice about the prefix.')
+  })
+
+  it('tells the model to keep needed leading connectors or punctuation', () => {
     expect(buildCompletionUserPrompt({
       prefix: '我觉得这个方案',
     })).toContain(
-      'If the natural next character is punctuation, start with that punctuation instead of skipping it.',
+      'If continuation depends on a connector or punctuation mark, start with that connector or punctuation instead of omitting it.',
     )
   })
 
@@ -217,6 +229,9 @@ describe('buildCompletionUserPrompt', () => {
     expect(buildCompletionUserPrompt({
       prefix: '我觉得这个方案',
     })).toContain('Continue the prefix with ONE short, natural continuation in the SAME language as the prefix.')
+    expect(buildCompletionUserPrompt({
+      prefix: '我觉得这个方案',
+    })).toContain('Your output must be directly appendable after the prefix as part of the SAME utterance.')
     expect(buildCompletionUserPrompt({
       prefix: '我觉得这个方案',
     })).toContain('Keep it short: a few words up to one sentence.')

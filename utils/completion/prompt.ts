@@ -41,10 +41,14 @@ export function buildCompletionUserPrompt(args: {
 
   userParts.push(
     `[Prefix]\n${args.prefix}\n\n[Task]\nContinue the prefix with ONE short, natural continuation in the SAME language as the prefix. `
-    + `If the natural next character is punctuation, start with that punctuation instead of skipping it. `
+    + `Your output must be directly appendable after the prefix as part of the SAME utterance. `
+    + `Do not switch roles from continuing the writer's text to replying as an assistant. `
+    + `Do not answer, react to, evaluate, summarize, or give advice about the prefix. `
+    + `A prefix may already be semantically complete and still allow a natural continuation, so continue it when that continuation still reads as the same utterance. `
+    + `If continuation depends on a connector or punctuation mark, start with that connector or punctuation instead of omitting it. `
     + `Output ONLY the continuation text, without repeating the prefix. `
     + `Keep it short: a few words up to one sentence. `
-    + `Only if the prefix is a fully self-contained finished message with nothing left to add, output EXACTLY __COPYCAT_SKIP__ instead.`,
+    + `Only output EXACTLY __COPYCAT_SKIP__ when you cannot continue naturally without turning the output into a reply instead of a continuation.`,
   )
 
   if (args.suffix !== undefined && args.suffix.trim().length > 0) {

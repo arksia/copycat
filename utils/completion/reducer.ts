@@ -367,6 +367,13 @@ export function reduceCompletionState(
       }
       return {
         effects: [{
+          requestId: state.session.requestId,
+          sessionId: state.session.sessionId,
+          type: 'CANCEL_REQUEST',
+        }, {
+          sessionId: state.session.sessionId,
+          type: 'CANCEL_DEBOUNCE',
+        }, {
           sessionId: state.session.sessionId,
           type: 'CLEAR_SUGGESTION',
         }],

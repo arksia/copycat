@@ -272,6 +272,13 @@ class CopycatFlowController {
           reason: triggerDecision.reason,
           revision: snapshot.revision,
         })
+        const state = this.controller.getState()
+        if (state.session) {
+          this.controller.dispatch({
+            sessionId: state.session.sessionId,
+            type: 'REQUEST_SUPPRESSED',
+          })
+        }
         return
       }
     }

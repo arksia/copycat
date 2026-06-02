@@ -281,6 +281,55 @@ describe('reduceCompletionState', () => {
     expect(result.state.session).toBeNull()
     expect(result.effects).toEqual([
       {
+        requestId: null,
+        sessionId: 'sess_1',
+        type: 'CANCEL_REQUEST',
+      },
+      {
+        sessionId: 'sess_1',
+        type: 'CANCEL_DEBOUNCE',
+      },
+      {
+        sessionId: 'sess_1',
+        type: 'CLEAR_SUGGESTION',
+      },
+    ])
+  })
+
+  it('clears an existing shown suggestion when a new request is suppressed locally', () => {
+    const state = buildState({
+      mode: 'showingFast',
+      snapshot: buildSnapshot(),
+      session: {
+        fingerprint: 'fp-1',
+        latencyMs: 120,
+        originalSuggestion: ' world',
+        requestId: 'req-1',
+        sessionId: 'sess_1',
+        snapshotRevision: 1,
+        stage: 'fast',
+        suggestion: ' world',
+      },
+    })
+
+    const result = reduceCompletionState(state, {
+      sessionId: 'sess_1',
+      type: 'REQUEST_SUPPRESSED',
+    })
+
+    expect(result.state.mode).toBe('idle')
+    expect(result.state.session).toBeNull()
+    expect(result.effects).toEqual([
+      {
+        requestId: 'req-1',
+        sessionId: 'sess_1',
+        type: 'CANCEL_REQUEST',
+      },
+      {
+        sessionId: 'sess_1',
+        type: 'CANCEL_DEBOUNCE',
+      },
+      {
         sessionId: 'sess_1',
         type: 'CLEAR_SUGGESTION',
       },

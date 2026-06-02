@@ -36,23 +36,33 @@ export function evaluateCompletionTrigger(args: {
   const requestedPrefix = normalizeCompletionPrefix(args.memory.lastRequestedPrefix)
   const skipPrefix = normalizeCompletionPrefix(args.memory.lastSkipPrefix)
 
-  if (skipPrefix.length > 0 && normalizedPrefix.startsWith(skipPrefix)) {
-    const skipDelta = normalizedPrefix.length - skipPrefix.length
-    if (skipDelta >= skipRetryMinDelta) {
+  if (skipPrefix.length > 0) {
+    if (!isPrefixVariant(normalizedPrefix, skipPrefix)) {
       return { allowed: true }
     }
 
-    if (args.now - args.memory.lastSkipAt >= skipCooldownMs) {
-      return { allowed: true }
-    }
+    if (normalizedPrefix.startsWith(skipPrefix)) {
+      const skipDelta = normalizedPrefix.length - skipPrefix.length
+      if (skipDelta >= skipRetryMinDelta) {
+        return { allowed: true }
+      }
 
-    return {
-      allowed: false,
-      reason: skipDelta === 0 ? 'skip_cache' : 'skip_cooldown',
+      if (args.now - args.memory.lastSkipAt >= skipCooldownMs) {
+        return { allowed: true }
+      }
+
+      return {
+        allowed: false,
+        reason: skipDelta === 0 ? 'skip_cache' : 'skip_cooldown',
+      }
     }
   }
 
   if (requestedPrefix.length > 0) {
+    if (!isPrefixVariant(normalizedPrefix, requestedPrefix)) {
+      return { allowed: true }
+    }
+
     const delta = Math.abs(normalizedPrefix.length - requestedPrefix.length)
     if (delta < retryMinDelta) {
       return {
@@ -67,4 +77,8 @@ export function evaluateCompletionTrigger(args: {
 
 export function normalizeCompletionPrefix(prefix: string): string {
   return prefix.replace(/\s+/g, ' ').trimStart()
+}
+
+function isPrefixVariant(current: string, previous: string): boolean {
+  return current.startsWith(previous) || previous.startsWith(current)
 }

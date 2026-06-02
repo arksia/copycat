@@ -528,6 +528,10 @@ async function requestCompletion() {
     logFlow('request-skip-trigger-policy', {
       reason: triggerDecision.reason,
     })
+    await cancelActiveRequest()
+    suggestion.value = ''
+    lastFingerprint.value = ''
+    queueGhostSync()
     return
   }
 
