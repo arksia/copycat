@@ -17,6 +17,7 @@ const baseSettings: Settings = {
   baseUrl: 'https://api.groq.com/openai/v1',
   apiKey: '',
   model: 'llama-3.1-8b-instant',
+  thinkingControlMode: 'auto',
   temperature: 0.2,
   maxTokens: 48,
   debounceMs: 300,
@@ -90,6 +91,7 @@ describe('normalizeSettingsShape', () => {
   it('falls back to defaults for invalid scalar values', () => {
     const invalidSettings = {
       provider: 'not-real',
+      thinkingControlMode: 'bad-mode',
       maxTokens: 'bad',
       debounceMs: null,
       temperature: 'hot',
@@ -97,10 +99,21 @@ describe('normalizeSettingsShape', () => {
 
     expect(normalizeSettingsShape(invalidSettings)).toMatchObject({
       provider: DEFAULT_SETTINGS.provider,
+      thinkingControlMode: DEFAULT_SETTINGS.thinkingControlMode,
       maxTokens: DEFAULT_SETTINGS.maxTokens,
       debounceMs: DEFAULT_SETTINGS.debounceMs,
       temperature: DEFAULT_SETTINGS.temperature,
     })
+  })
+
+  it('migrates legacy disableThinking booleans into the new thinking control mode', () => {
+    expect(normalizeSettingsShape({
+      disableThinking: true,
+    } as unknown as Partial<Settings>).thinkingControlMode).toBe('auto')
+
+    expect(normalizeSettingsShape({
+      disableThinking: false,
+    } as unknown as Partial<Settings>).thinkingControlMode).toBe('auto')
   })
 
   it('normalizes missing and invalid soul fields', () => {

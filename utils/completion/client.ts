@@ -7,6 +7,11 @@ import { buildCompletionUserPrompt } from './prompt'
 
 export const COMPLETION_SKIP_SENTINEL = '__COPYCAT_SKIP__'
 
+type ResolvedThinkingControlMode
+  = | 'none'
+    | 'reasoning_effort_none'
+    | 'thinking_disabled'
+
 /**
  * Arguments for a single inline completion request.
  *
@@ -68,6 +73,10 @@ interface ChatCompletionBody {
   temperature: number
   max_tokens: number
   stream: false
+  reasoning_effort?: 'none'
+  thinking?: {
+    type: 'disabled'
+  }
 }
 
 /**
@@ -118,9 +127,12 @@ export async function completeOnceDetailed({
     soulContext,
   })
   const body = buildChatCompletionBody({
+    provider: settings.provider,
+    baseUrl: settings.baseUrl,
     model: settings.model,
     systemPrompt: settings.systemPrompt,
     userPrompt,
+    thinkingControlMode: settings.thinkingControlMode,
     temperature: settings.temperature,
     maxTokens: settings.maxTokens,
   })
@@ -159,14 +171,17 @@ export async function completeOnceDetailed({
   }
 }
 
-function buildChatCompletionBody(args: {
+export function buildChatCompletionBody(args: {
+  provider: Settings['provider']
+  baseUrl: string
   model: string
   systemPrompt: string
   userPrompt: string
+  thinkingControlMode: Settings['thinkingControlMode']
   temperature: number
   maxTokens: number
 }): ChatCompletionBody {
-  return {
+  const body: ChatCompletionBody = {
     model: args.model,
     messages: [
       { role: 'system', content: args.systemPrompt },
@@ -176,6 +191,83 @@ function buildChatCompletionBody(args: {
     max_tokens: args.maxTokens,
     stream: false,
   }
+
+  const thinkingControls = buildThinkingControls(
+    resolveThinkingControlMode({
+      provider: args.provider,
+      baseUrl: args.baseUrl,
+      model: args.model,
+      mode: args.thinkingControlMode,
+    }),
+  )
+  if (thinkingControls.reasoning_effort !== undefined) {
+    body.reasoning_effort = thinkingControls.reasoning_effort
+  }
+  if (thinkingControls.thinking !== undefined) {
+    body.thinking = thinkingControls.thinking
+  }
+
+  return body
+}
+
+export function resolveThinkingControlMode(args: {
+  provider: Settings['provider']
+  baseUrl: string
+  model: string
+  mode: Settings['thinkingControlMode']
+}): ResolvedThinkingControlMode {
+  if (args.mode !== 'auto') {
+    return args.mode
+  }
+
+  const normalizedModel = args.model.toLowerCase()
+  const normalizedBaseUrl = args.baseUrl.toLowerCase()
+
+  if (args.provider === 'deepseek') {
+    return 'thinking_disabled'
+  }
+
+  if (normalizedBaseUrl.includes('minimax')) {
+    return 'thinking_disabled'
+  }
+
+  if (args.provider === 'openai' && normalizedModel.startsWith('gpt-5')) {
+    return 'reasoning_effort_none'
+  }
+
+  if (args.provider === 'groq' && normalizedModel.includes('qwen3')) {
+    return 'reasoning_effort_none'
+  }
+
+  if (args.provider === 'ollama') {
+    return 'reasoning_effort_none'
+  }
+
+  if (normalizedModel.startsWith('minimax-m')) {
+    return 'thinking_disabled'
+  }
+
+  return 'none'
+}
+
+function buildThinkingControls(
+  mode: ResolvedThinkingControlMode,
+): Pick<ChatCompletionBody, 'reasoning_effort' | 'thinking'> {
+  if (mode === 'thinking_disabled') {
+    return {
+      thinking: {
+        type: 'disabled',
+      },
+    }
+  }
+
+  if (mode === 'reasoning_effort_none') {
+    return {
+      reasoning_effort: 'none',
+    }
+  }
+
+  return {}
 }
 
 function safeStringify(value: unknown): string {

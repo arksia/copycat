@@ -1,4 +1,8 @@
 export type ProviderId = 'groq' | 'openai' | 'deepseek' | 'ollama' | 'custom'
+export type ThinkingControlMode
+  = | 'auto'
+    | 'reasoning_effort_none'
+    | 'thinking_disabled'
 
 export interface SoulProfile {
   identity: string
@@ -116,6 +120,7 @@ export interface Settings {
   baseUrl: string
   apiKey: string
   model: string
+  thinkingControlMode: ThinkingControlMode
   temperature: number
   maxTokens: number
   debounceMs: number

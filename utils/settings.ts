@@ -58,6 +58,7 @@ export const DEFAULT_SETTINGS: Settings = {
   baseUrl: PROVIDER_PRESETS.groq.baseUrl,
   apiKey: '',
   model: PROVIDER_PRESETS.groq.defaultModel,
+  thinkingControlMode: 'auto',
   temperature: 0.2,
   maxTokens: 48,
   debounceMs: 300,
@@ -230,6 +231,7 @@ export function normalizeSettingsShape(stored: Partial<Settings>): Settings {
     ...buildDefaultSettings(),
     ...stored,
     provider: isProviderId(stored.provider) ? stored.provider : DEFAULT_SETTINGS.provider,
+    thinkingControlMode: normalizeThinkingControlMode(stored),
     soul: normalizeSoulSettings(stored.soul),
     enabledHosts: normalizeHostList(stored.enabledHosts, DEFAULT_SETTINGS.enabledHosts),
     disabledHosts: normalizeHostList(stored.disabledHosts, DEFAULT_SETTINGS.disabledHosts),
@@ -238,6 +240,23 @@ export function normalizeSettingsShape(stored: Partial<Settings>): Settings {
     minPrefixChars: normalizeNumber(stored.minPrefixChars, DEFAULT_SETTINGS.minPrefixChars),
     temperature: normalizeNumber(stored.temperature, DEFAULT_SETTINGS.temperature),
   }
+}
+
+function normalizeThinkingControlMode(stored: Partial<Settings>): Settings['thinkingControlMode'] {
+  if (
+    stored.thinkingControlMode === 'auto'
+    || stored.thinkingControlMode === 'reasoning_effort_none'
+    || stored.thinkingControlMode === 'thinking_disabled'
+  ) {
+    return stored.thinkingControlMode
+  }
+
+  const legacyDisableThinking = (stored as Partial<{ disableThinking: unknown }>).disableThinking
+  if (typeof legacyDisableThinking === 'boolean') {
+    return 'auto'
+  }
+
+  return DEFAULT_SETTINGS.thinkingControlMode
 }
 
 function isProviderId(value: unknown): value is Settings['provider'] {

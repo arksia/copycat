@@ -15,6 +15,7 @@ import type {
 import type { DiscoveredModel } from '~/utils/providers/openai-compatible'
 import { computed, onMounted, ref, watch } from 'vue'
 import { buildSoulContext } from '~/soul'
+import { buildChatCompletionBody } from '~/utils/completion/client'
 import { loadTelemetrySnapshot } from '~/utils/completion/telemetry'
 import { PROVIDER_ORDER, PROVIDER_PRESETS, resolveProviderPreset } from '~/utils/providers'
 import {
@@ -141,15 +142,16 @@ async function testConnection() {
     const res = await fetch(url, {
       method: 'POST',
       headers: buildOpenAICompatibleHeaders(settings.value.apiKey),
-      body: JSON.stringify({
+      body: JSON.stringify(buildChatCompletionBody({
+        provider: settings.value.provider,
+        baseUrl: settings.value.baseUrl,
         model: settings.value.model,
-        messages: [
-          { role: 'system', content: 'You are a connectivity test.' },
-          { role: 'user', content: 'Say "ok".' },
-        ],
-        max_tokens: 4,
+        thinkingControlMode: settings.value.thinkingControlMode,
+        systemPrompt: 'You are a connectivity test.',
+        userPrompt: 'Say "ok".',
+        maxTokens: 4,
         temperature: 0,
-      }),
+      })),
     })
     if (!res.ok) {
       const text = await res.text()
@@ -499,6 +501,18 @@ async function runKnowledgeSearch() {
         <h2 class="mb-4 text-base font-semibold">Completion behavior</h2>
 
         <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div class="md:col-span-2">
+            <label class="label">Thinking disable strategy</label>
+            <select v-model="settings.thinkingControlMode" class="input">
+              <option value="auto">Auto</option>
+              <option value="reasoning_effort_none">reasoning_effort: none</option>
+              <option value="thinking_disabled">thinking.type: disabled</option>
+            </select>
+            <p class="mt-1 text-xs text-neutral-500">
+              Auto resolves a provider-specific disable strategy from the selected provider, host, and model.
+            </p>
+          </div>
+
           <div>
             <label class="label">Min prefix chars</label>
             <input
