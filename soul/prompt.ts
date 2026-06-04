@@ -1,10 +1,11 @@
+import type { SoulBlock } from './profile'
 import type {
   LearnedSoulProfile,
   SoulBudgetMeta,
   SoulProjectionInput,
 } from '~/types'
 import { buildLearnedSoulBlocks } from './distill'
-import { buildExplicitSoulBlocks, type SoulBlock } from './profile'
+import { buildPinnedSoulBlocks } from './profile'
 
 const BLOCK_SEPARATOR = '\n\n'
 const LIST_ITEM_PREFIX = '- '
@@ -17,13 +18,13 @@ export interface SoulProjection {
 }
 
 /**
- * Projects explicit and learned Soul profiles into one structured prompt fragment.
+ * Projects pinned and observed Soul cues into one structured prompt fragment.
  *
  * Before:
- * - `{ identity: "工程师", style: "", preferences: "先给结论", avoidances: "", terms: "", notes: "" }`
+ * - `{ text: "工程师\n先给结论" }`
  *
  * After:
- * - `[Role Context]\n工程师\n\n[Writing Preferences]\n- 先给结论`
+ * - `[Pinned Soul]\n工程师\n先给结论`
  */
 export function buildSoulContext(input: SoulProjectionInput): string {
   return buildSoulProjection(input).context
@@ -45,7 +46,7 @@ export function buildSoulProjection(input: SoulProjectionInput): SoulProjection 
   }
 
   const blocks = mergeSoulBlocks(
-    buildExplicitSoulBlocks(input.explicit),
+    buildPinnedSoulBlocks(input.text),
     buildLearnedSoulBlocks(input.learned ?? buildEmptyLearnedSoulProfile()),
   )
   if (blocks.length === 0) {
@@ -197,7 +198,7 @@ function fitTextSoulBlock(block: SoulBlock, budget: number): SoulBlock | null {
       value,
     })
 
-    if (truncatedValue) {
+    if (truncatedValue !== null) {
       values.push(truncatedValue)
     }
 
@@ -227,7 +228,7 @@ function fitListSoulBlock(block: SoulBlock, budget: number): SoulBlock | null {
       value,
     })
 
-    if (truncatedValue) {
+    if (truncatedValue !== null) {
       values.push(truncatedValue)
     }
 

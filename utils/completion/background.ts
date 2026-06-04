@@ -2,32 +2,31 @@ import type {
   CompletionDebugInfo,
   CompletionRequest,
   CompletionResponse,
-  LearnedSoulProfile,
   KnowledgeChunkEmbedding,
-  SoulProfile,
+  LearnedSoulProfile,
 } from '~/types'
 import {
-  buildCompletionCacheKey,
-  CompletionMemoryCache,
-  DEFAULT_COMPLETION_CACHE_TTL_MS,
-} from './cache'
-import { buildCompletionDebugInfo } from './debug'
-import { completeOnce, completeOnceDetailed } from './client'
-import { deriveCompletionQualitySignal } from './telemetry'
-import { getPersistedCompletion, putPersistedCompletion } from '~/utils/storage/repositories/completions'
-import { getCompletionEventStats } from '~/utils/storage/repositories/events'
-import { loadSettings } from '~/utils/settings'
+  mergeCompletionContext,
+  resolveCompletionKnowledge,
+  resolveKnowledgeRetrievalBudget,
+} from '~/knowledge'
 import {
   buildSoulProjection,
   distillSoulSignals,
   getSoulObservedSignalSnapshot,
   listMatureSoulObservedSignals,
 } from '~/soul'
+import { loadSettings } from '~/utils/settings'
+import { getPersistedCompletion, putPersistedCompletion } from '~/utils/storage/repositories/completions'
+import { getCompletionEventStats } from '~/utils/storage/repositories/events'
 import {
-  mergeCompletionContext,
-  resolveCompletionKnowledge,
-  resolveKnowledgeRetrievalBudget,
-} from '~/knowledge'
+  buildCompletionCacheKey,
+  CompletionMemoryCache,
+  DEFAULT_COMPLETION_CACHE_TTL_MS,
+} from './cache'
+import { completeOnce, completeOnceDetailed } from './client'
+import { buildCompletionDebugInfo } from './debug'
+import { deriveCompletionQualitySignal } from './telemetry'
 
 interface QueryEmbeddingMeta {
   backend: KnowledgeChunkEmbedding['backend']
@@ -122,7 +121,7 @@ export function createBackgroundCompletionService(args: {
     const completionContext = mergeCompletionContext(req.context, knowledgeResolution.context)
     const soulProjection = resolveRuntimeSoulProjection({
       enabled: settings.soul.enabled,
-      explicitProfile: settings.soul.profile,
+      text: settings.soul.text,
       learnedProfile: distilledSoul.profile,
     })
     const soulContext = soulProjection.context
@@ -251,11 +250,11 @@ export function createBackgroundCompletionService(args: {
             budget: soulProjection.meta,
             explicitContext: buildSoulProjection({
               enabled: settings.soul.enabled,
-              explicit: settings.soul.profile,
+              text: settings.soul.text,
             }).context,
             learnedContext: buildSoulProjection({
               enabled: settings.soul.enabled,
-              explicit: emptyExplicitSoulProfile(),
+              text: '',
               learned: distilledSoul.profile,
             }).context,
             learnedProfile: distilledSoul.profile,
@@ -340,25 +339,14 @@ export function createBackgroundCompletionService(args: {
 
 function resolveRuntimeSoulProjection(args: {
   enabled: boolean
-  explicitProfile: SoulProfile
+  text: string
   learnedProfile: LearnedSoulProfile
 }) {
   return buildSoulProjection({
     enabled: args.enabled,
-    explicit: args.explicitProfile,
+    text: args.text,
     learned: args.learnedProfile,
   })
-}
-
-function emptyExplicitSoulProfile() {
-  return {
-    identity: '',
-    style: '',
-    preferences: '',
-    avoidances: '',
-    terms: '',
-    notes: '',
-  }
 }
 
 function emptyResponse(
@@ -398,7 +386,7 @@ function logDevCompletionTimings(args: {
     return
   }
 
-  console.info('[copycat][timings]', {
+  console.warn('[copycat][timings]', {
     id: args.id,
     stage: args.stage,
     prefixLength: args.prefixLength,

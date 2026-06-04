@@ -61,7 +61,7 @@ const loadingTelemetry = ref(false)
 const provider = computed(() => resolveProviderPreset(settings.value.provider))
 const soulPreview = computed(() => buildSoulContext({
   enabled: settings.value.soul.enabled,
-  explicit: settings.value.soul.profile,
+  text: settings.value.soul.text,
 }))
 
 onMounted(async () => {
@@ -549,7 +549,7 @@ async function runKnowledgeSearch() {
           <div>
             <h2 class="text-base font-semibold">Soul</h2>
             <p class="mt-1 text-sm text-neutral-500">
-              Persistent identity, style, and preferences injected into completion requests.
+              A short, editable memory used to shape completions. Turn off learning to keep it fixed.
             </p>
           </div>
           <label class="flex items-center gap-2 text-sm">
@@ -562,66 +562,33 @@ async function runKnowledgeSearch() {
           </label>
         </div>
 
-        <div class="grid grid-cols-1 gap-4">
-          <div>
-            <label class="label">Identity</label>
-            <textarea
-              v-model="settings.soul.profile.identity"
-              rows="3"
-              class="input h-auto py-2 font-mono text-xs"
-              placeholder="Who you are, what you work on, and the long-term context the model should know."
-            />
-          </div>
+        <div>
+          <label class="label">Soul text</label>
+          <textarea
+            v-model="settings.soul.text"
+            rows="8"
+            class="input h-auto py-2 font-mono text-xs leading-relaxed"
+            placeholder="Example: I build browser extensions and AI input tools. Prefer direct, practical continuations. Lead with the point. Avoid marketing language. Preserve project terms like ghost text and semantic recall."
+          />
+          <p class="mt-2 text-xs text-neutral-500">
+            This is the only manual Soul input. Learned cues stay invisible and only shape completions when learning is enabled.
+          </p>
+        </div>
 
-          <div>
-            <label class="label">Style</label>
-            <textarea
-              v-model="settings.soul.profile.style"
-              rows="3"
-              class="input h-auto py-2 font-mono text-xs"
-              placeholder="Preferred tone, pacing, and writing style."
+        <div class="mt-4 rounded-xl border border-neutral-200 p-4">
+          <label class="flex items-start gap-3 text-sm">
+            <input
+              v-model="settings.soul.learningEnabled"
+              type="checkbox"
+              class="mt-0.5 h-4 w-4 rounded border-neutral-300 text-brand-600 focus:ring-brand-500"
             />
-          </div>
-
-          <div>
-            <label class="label">Preferences</label>
-            <textarea
-              v-model="settings.soul.profile.preferences"
-              rows="3"
-              class="input h-auto py-2 font-mono text-xs"
-              placeholder="Default preferences such as local-first, concise answers, or conclusion-first structure."
-            />
-          </div>
-
-          <div>
-            <label class="label">Avoidances</label>
-            <textarea
-              v-model="settings.soul.profile.avoidances"
-              rows="3"
-              class="input h-auto py-2 font-mono text-xs"
-              placeholder="Patterns, tone, or habits the model should avoid."
-            />
-          </div>
-
-          <div>
-            <label class="label">Terms</label>
-            <textarea
-              v-model="settings.soul.profile.terms"
-              rows="2"
-              class="input h-auto py-2 font-mono text-xs"
-              placeholder="Common project terms, preferred naming, or domain vocabulary."
-            />
-          </div>
-
-          <div>
-            <label class="label">Notes</label>
-            <textarea
-              v-model="settings.soul.profile.notes"
-              rows="3"
-              class="input h-auto py-2 font-mono text-xs"
-              placeholder="Free-form notes that do not fit the structured fields."
-            />
-          </div>
+            <span>
+              <span class="font-medium text-neutral-800">Learn from accepted and rejected completions</span>
+              <span class="mt-1 block text-xs text-neutral-500">
+                Disable this when you want Soul to stay fixed to the text above.
+              </span>
+            </span>
+          </label>
         </div>
 
         <div class="mt-4">

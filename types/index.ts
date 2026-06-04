@@ -4,15 +4,6 @@ export type ThinkingControlMode
     | 'reasoning_effort_none'
     | 'thinking_disabled'
 
-export interface SoulProfile {
-  identity: string
-  style: string
-  preferences: string
-  avoidances: string
-  terms: string
-  notes: string
-}
-
 export interface LearnedSoulProfile {
   preferences: string[]
   avoidances: string[]
@@ -28,7 +19,8 @@ export interface DistilledSoulCue {
 
 export interface SoulSettings {
   enabled: boolean
-  profile: SoulProfile
+  learningEnabled: boolean
+  text: string
 }
 
 export interface SoulBudgetMeta {
@@ -84,14 +76,15 @@ export interface SoulObservedSignalSnapshot {
 
 export interface SoulProjectionInput {
   enabled: boolean
-  explicit: SoulProfile
+  text: string
   learned?: LearnedSoulProfile
 }
 
 export interface SettingsPatch extends Partial<Omit<Settings, 'soul'>> {
   soul?: Partial<{
     enabled: boolean
-    profile: Partial<SoulProfile>
+    learningEnabled: boolean
+    text: string
   }>
 }
 

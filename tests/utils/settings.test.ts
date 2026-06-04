@@ -1,9 +1,9 @@
 import type { Settings } from '~/types'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
-  DEFAULT_SETTINGS,
   buildDefaultSettings,
   buildDevSettingsOverride,
+  DEFAULT_SETTINGS,
   hostMatches,
   isHostEnabled,
   loadSettings,
@@ -25,14 +25,8 @@ const baseSettings: Settings = {
   systemPrompt: 'test',
   soul: {
     enabled: false,
-    profile: {
-      identity: '',
-      style: '',
-      preferences: '',
-      avoidances: '',
-      terms: '',
-      notes: '',
-    },
+    learningEnabled: true,
+    text: '',
   },
   enabledHosts: ['chatgpt.com'],
   disabledHosts: [],
@@ -120,6 +114,25 @@ describe('normalizeSettingsShape', () => {
     const invalidSettings = {
       soul: {
         enabled: 'yes',
+        learningEnabled: 'no',
+        text: '  builder\nconcise  ',
+      },
+    } as unknown as Partial<Settings>
+
+    expect(normalizeSettingsShape(invalidSettings)).toMatchObject({
+      soul: {
+        enabled: false,
+        learningEnabled: true,
+        text: 'builder\nconcise',
+      },
+    })
+  })
+
+  it('migrates legacy structured soul profile fields into soul text', () => {
+    const legacySettings = {
+      soul: {
+        enabled: true,
+        learningEnabled: false,
         profile: {
           identity: '  builder  ',
           style: null,
@@ -131,17 +144,11 @@ describe('normalizeSettingsShape', () => {
       },
     } as unknown as Partial<Settings>
 
-    expect(normalizeSettingsShape(invalidSettings)).toMatchObject({
+    expect(normalizeSettingsShape(legacySettings)).toMatchObject({
       soul: {
-        enabled: false,
-        profile: {
-          identity: 'builder',
-          style: '',
-          preferences: 'concise',
-          avoidances: '',
-          terms: 'copycat, soul',
-          notes: '',
-        },
+        enabled: true,
+        learningEnabled: false,
+        text: 'builder\nconcise\ncopycat, soul',
       },
     })
   })
@@ -172,6 +179,7 @@ describe('buildDevSettingsOverride', () => {
 
   it('includes dev soul fields when soul env values are present', () => {
     vi.stubEnv('VITE_COPYCAT_SOUL_ENABLED', 'true')
+    vi.stubEnv('VITE_COPYCAT_SOUL_LEARNING_ENABLED', 'false')
     vi.stubEnv('VITE_COPYCAT_SOUL_IDENTITY', 'A pragmatic extension engineer.')
     vi.stubEnv('VITE_COPYCAT_SOUL_STYLE', 'Direct and concise.')
     vi.stubEnv('VITE_COPYCAT_SOUL_PREFERENCES', 'Lead with the smallest workable implementation.')
@@ -182,14 +190,26 @@ describe('buildDevSettingsOverride', () => {
     expect(buildDevSettingsOverride()).toMatchObject({
       soul: {
         enabled: true,
-        profile: {
-          identity: 'A pragmatic extension engineer.',
-          style: 'Direct and concise.',
-          preferences: 'Lead with the smallest workable implementation.',
-          avoidances: 'Avoid vague language.',
-          terms: 'ghost text\nsemantic recall',
-          notes: 'Prefer implementation detail over abstraction talk.',
-        },
+        learningEnabled: false,
+        text: [
+          'A pragmatic extension engineer.',
+          'Direct and concise.',
+          'Lead with the smallest workable implementation.',
+          'Avoid vague language.',
+          'ghost text\nsemantic recall',
+          'Prefer implementation detail over abstraction talk.',
+        ].join('\n'),
+      },
+    })
+  })
+
+  it('prefers dev soul text over legacy segmented env fields', () => {
+    vi.stubEnv('VITE_COPYCAT_SOUL_TEXT', 'Write fixed Soul here.')
+    vi.stubEnv('VITE_COPYCAT_SOUL_IDENTITY', 'Ignored identity.')
+
+    expect(buildDevSettingsOverride()).toMatchObject({
+      soul: {
+        text: 'Write fixed Soul here.',
       },
     })
   })
@@ -209,14 +229,8 @@ describe('loadSettings', () => {
               enabled: true,
               soul: {
                 enabled: false,
-                profile: {
-                  identity: '',
-                  style: '',
-                  preferences: '',
-                  avoidances: '',
-                  terms: '',
-                  notes: '',
-                },
+                learningEnabled: true,
+                text: '',
               },
             },
           }),
@@ -228,24 +242,18 @@ describe('loadSettings', () => {
 
     expect(settings.soul).toEqual({
       enabled: true,
-      profile: {
-        identity: 'A pragmatic extension engineer.',
-        style: '',
-        preferences: 'Lead with the smallest workable implementation.',
-        avoidances: '',
-        terms: '',
-        notes: '',
-      },
+      learningEnabled: true,
+      text: 'A pragmatic extension engineer.\nLead with the smallest workable implementation.',
     })
   })
 })
 
 describe('saveSettings', () => {
-  it('deep-merges nested soul patches without clearing the existing profile', async () => {
+  it('merges soul patches without clearing existing text', async () => {
     const current = buildDefaultSettings()
     current.soul.enabled = false
-    current.soul.profile.identity = 'builder'
-    current.soul.profile.preferences = 'concise'
+    current.soul.learningEnabled = true
+    current.soul.text = 'builder\nconcise'
 
     const get = vi.fn().mockResolvedValue({
       'copycat:settings:v1': current,
@@ -264,19 +272,14 @@ describe('saveSettings', () => {
     const saved = await saveSettings({
       soul: {
         enabled: true,
+        learningEnabled: false,
       },
     })
 
     expect(saved.soul).toEqual({
       enabled: true,
-      profile: {
-        identity: 'builder',
-        style: '',
-        preferences: 'concise',
-        avoidances: '',
-        terms: '',
-        notes: '',
-      },
+      learningEnabled: false,
+      text: 'builder\nconcise',
     })
     expect(set).toHaveBeenCalledTimes(1)
   })

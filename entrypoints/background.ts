@@ -11,26 +11,26 @@ import type {
   RuntimeMessage,
 } from '~/types'
 import {
-  createBackgroundCompletionService,
-} from '~/utils/completion/background'
-import { openSettingsPage } from '~/utils/runtime'
-import {
-  getCompletionEventStats,
-  listRecentCompletionEventsByHost,
-  putCompletionEvent,
-} from '~/utils/storage/repositories/events'
-import {
-  getSoulObservedSignalSnapshot,
-  deriveSoulObservedSignals,
-  upsertSoulObservedSignal,
-} from '~/soul'
-import {
   deleteKnowledgeDocument,
   importMarkdownKnowledge,
   listKnowledgeDocuments,
   searchKnowledgeChunks,
 } from '~/knowledge'
+import {
+  deriveSoulObservedSignals,
+  getSoulObservedSignalSnapshot,
+  upsertSoulObservedSignal,
+} from '~/soul'
+import {
+  createBackgroundCompletionService,
+} from '~/utils/completion/background'
+import { openSettingsPage } from '~/utils/runtime'
 import { loadSettings, saveSettings } from '~/utils/settings'
+import {
+  getCompletionEventStats,
+  listRecentCompletionEventsByHost,
+  putCompletionEvent,
+} from '~/utils/storage/repositories/events'
 
 export default defineBackground(() => {
   const defaultKnowledgeBaseId = 'default'
@@ -114,11 +114,11 @@ export default defineBackground(() => {
           console.warn('[copycat] failed to persist completion event', error)
         })
         void loadSettings()
-          .then((settings) => {
-            if (!settings.soul.enabled) {
+          .then(async (settings) => {
+            if (!settings.soul.learningEnabled) {
               return
             }
-            return persistSoulObservedSignals(message.payload)
+            await persistSoulObservedSignals(message.payload)
           })
           .catch((error: unknown) => {
             console.warn('[copycat] failed to persist Soul observed signals', error)
@@ -253,11 +253,12 @@ export default defineBackground(() => {
 
     return importMarkdownKnowledge({
       embedChunks: embedKnowledgeChunks,
-      processMarkdown: payload => sendOffscreenMessage({
-        payload,
-        target: 'offscreen',
-        type: 'knowledge/process-markdown',
-      }),
+      processMarkdown: async payload =>
+        sendOffscreenMessage({
+          payload,
+          target: 'offscreen',
+          type: 'knowledge/process-markdown',
+        }),
       request,
     })
   }
@@ -420,5 +421,4 @@ export default defineBackground(() => {
       }
     }
   }
-
 })

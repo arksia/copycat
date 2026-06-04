@@ -1,5 +1,5 @@
 export { buildLearnedSoulBlocks, distillSoulSignals } from './distill'
-export { buildExplicitSoulBlocks } from './profile'
+export { buildPinnedSoulBlocks } from './profile'
 export { buildSoulContext, buildSoulProjection } from './prompt'
 export {
   buildSoulSignalEvidence,

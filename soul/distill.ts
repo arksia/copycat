@@ -88,7 +88,7 @@ export function buildLearnedSoulBlocks(profile: LearnedSoulProfile): SoulBlock[]
 
   if (profile.preferences.length > 0) {
     blocks.push({
-      label: 'Learned Preferences',
+      label: 'Observed Preferences',
       kind: 'list',
       values: profile.preferences,
       outputOrder: 1,
@@ -98,7 +98,7 @@ export function buildLearnedSoulBlocks(profile: LearnedSoulProfile): SoulBlock[]
 
   if (profile.avoidances.length > 0) {
     blocks.push({
-      label: 'Learned Avoidances',
+      label: 'Observed Avoidances',
       kind: 'list',
       values: profile.avoidances,
       outputOrder: 2,
@@ -108,7 +108,7 @@ export function buildLearnedSoulBlocks(profile: LearnedSoulProfile): SoulBlock[]
 
   if (profile.terms.length > 0) {
     blocks.push({
-      label: 'Learned Terms',
+      label: 'Observed Terms',
       kind: 'list',
       values: profile.terms,
       outputOrder: 3,

@@ -1,19 +1,12 @@
-import type { Settings, SettingsPatch, SoulProfile, SoulSettings } from '~/types'
+import type { Settings, SettingsPatch, SoulSettings } from '~/types'
 import { PROVIDER_PRESETS } from './providers'
 
 const STORAGE_KEY = 'copycat:settings:v1'
-const DEFAULT_SOUL_PROFILE: SoulProfile = {
-  identity: '',
-  style: '',
-  preferences: '',
-  avoidances: '',
-  terms: '',
-  notes: '',
-}
 
 const DEFAULT_SOUL_SETTINGS: SoulSettings = {
   enabled: false,
-  profile: { ...DEFAULT_SOUL_PROFILE },
+  learningEnabled: true,
+  text: '',
 }
 
 /**
@@ -66,7 +59,8 @@ export const DEFAULT_SETTINGS: Settings = {
   systemPrompt: DEFAULT_SYSTEM_PROMPT,
   soul: {
     enabled: DEFAULT_SOUL_SETTINGS.enabled,
-    profile: { ...DEFAULT_SOUL_PROFILE },
+    learningEnabled: DEFAULT_SOUL_SETTINGS.learningEnabled,
+    text: DEFAULT_SOUL_SETTINGS.text,
   },
   enabledHosts: [
     'chatgpt.com',
@@ -91,15 +85,12 @@ export const DEFAULT_SETTINGS: Settings = {
  * - callers must avoid mutating the exported `DEFAULT_SETTINGS` object graph
  *
  * Returns:
- * - a new settings object with cloned nested arrays and Soul profile fields
+ * - a new settings object with cloned nested arrays and Soul fields
  */
 export function buildDefaultSettings(): Settings {
   return {
     ...DEFAULT_SETTINGS,
-    soul: {
-      enabled: DEFAULT_SOUL_SETTINGS.enabled,
-      profile: { ...DEFAULT_SOUL_PROFILE },
-    },
+    soul: { ...DEFAULT_SOUL_SETTINGS },
     enabledHosts: DEFAULT_SETTINGS.enabledHosts.slice(),
     disabledHosts: DEFAULT_SETTINGS.disabledHosts.slice(),
   }
@@ -119,12 +110,14 @@ export function buildDefaultSettings(): Settings {
  * - a partial settings object, or `null` when no override is configured
  */
 export function buildDevSettingsOverride(): Partial<Settings> | null {
-  const provider = import.meta.env.VITE_COPYCAT_PROVIDER
-  const baseUrl = import.meta.env.VITE_COPYCAT_BASE_URL
-  const model = import.meta.env.VITE_COPYCAT_MODEL
-  const apiKey = import.meta.env.VITE_COPYCAT_API_KEY
+  const env = import.meta.env as Record<string, unknown>
+  const provider = env.VITE_COPYCAT_PROVIDER
+  const baseUrl = env.VITE_COPYCAT_BASE_URL
+  const model = env.VITE_COPYCAT_MODEL
+  const apiKey = env.VITE_COPYCAT_API_KEY
   const soulEnabled = parseBooleanEnv(import.meta.env.VITE_COPYCAT_SOUL_ENABLED)
-  const soulProfile = buildDevSoulProfile()
+  const soulLearningEnabled = parseBooleanEnv(import.meta.env.VITE_COPYCAT_SOUL_LEARNING_ENABLED)
+  const soulText = buildDevSoulText()
 
   const next: Partial<Settings> = {}
 
@@ -140,10 +133,11 @@ export function buildDevSettingsOverride(): Partial<Settings> | null {
   if (typeof apiKey === 'string' && apiKey.length > 0) {
     next.apiKey = apiKey
   }
-  if (soulEnabled !== undefined || soulProfile !== null) {
+  if (soulEnabled !== undefined || soulLearningEnabled !== undefined || soulText.length > 0) {
     next.soul = {
       enabled: soulEnabled ?? DEFAULT_SOUL_SETTINGS.enabled,
-      profile: soulProfile ?? { ...DEFAULT_SOUL_PROFILE },
+      learningEnabled: soulLearningEnabled ?? DEFAULT_SOUL_SETTINGS.learningEnabled,
+      text: soulText,
     }
   }
 
@@ -285,33 +279,48 @@ function normalizeNumber(value: unknown, fallback: number): number {
 
 function normalizeSoulSettings(value: unknown): SoulSettings {
   if (typeof value !== 'object' || value === null) {
-    return {
-      enabled: DEFAULT_SOUL_SETTINGS.enabled,
-      profile: { ...DEFAULT_SOUL_PROFILE },
-    }
+    return { ...DEFAULT_SOUL_SETTINGS }
   }
 
   const raw = value as Partial<SoulSettings>
   return {
     enabled: typeof raw.enabled === 'boolean' ? raw.enabled : DEFAULT_SOUL_SETTINGS.enabled,
-    profile: normalizeSoulProfile(raw.profile),
+    learningEnabled: typeof raw.learningEnabled === 'boolean'
+      ? raw.learningEnabled
+      : DEFAULT_SOUL_SETTINGS.learningEnabled,
+    text: normalizeSoulText(raw),
   }
 }
 
-function normalizeSoulProfile(value: unknown): SoulProfile {
-  if (typeof value !== 'object' || value === null) {
-    return { ...DEFAULT_SOUL_PROFILE }
+function normalizeSoulText(value: Partial<SoulSettings> & { profile?: unknown }): string {
+  if (typeof value.text === 'string') {
+    return normalizeSoulField(value.text)
   }
 
-  const raw = value as Partial<SoulProfile>
-  return {
-    identity: normalizeSoulField(raw.identity),
-    style: normalizeSoulField(raw.style),
-    preferences: normalizeSoulField(raw.preferences),
-    avoidances: normalizeSoulField(raw.avoidances),
-    terms: normalizeSoulField(raw.terms),
-    notes: normalizeSoulField(raw.notes),
+  return normalizeLegacySoulProfileText(value.profile)
+}
+
+function normalizeLegacySoulProfileText(value: unknown): string {
+  if (typeof value !== 'object' || value === null) {
+    return ''
   }
+
+  const raw = value as Partial<{
+    identity: unknown
+    style: unknown
+    preferences: unknown
+    avoidances: unknown
+    terms: unknown
+    notes: unknown
+  }>
+  return [
+    normalizeSoulField(raw.identity),
+    normalizeSoulField(raw.style),
+    normalizeSoulField(raw.preferences),
+    normalizeSoulField(raw.avoidances),
+    normalizeSoulField(raw.terms),
+    normalizeSoulField(raw.notes),
+  ].filter(Boolean).join('\n')
 }
 
 function normalizeSoulField(value: unknown): string {
@@ -325,12 +334,8 @@ function isSoulNeutral(value: unknown): boolean {
 
   const normalized = normalizeSoulSettings(value)
   return normalized.enabled === false
-    && normalized.profile.identity.length === 0
-    && normalized.profile.style.length === 0
-    && normalized.profile.preferences.length === 0
-    && normalized.profile.avoidances.length === 0
-    && normalized.profile.terms.length === 0
-    && normalized.profile.notes.length === 0
+    && normalized.learningEnabled === DEFAULT_SOUL_SETTINGS.learningEnabled
+    && normalized.text.length === 0
 }
 
 function mergeDevOverrideWithStored(
@@ -355,7 +360,8 @@ function mergeDevOverrideWithStored(
   return merged
 }
 
-function buildDevSoulProfile(): SoulProfile | null {
+function buildDevSoulText(): string {
+  const text = normalizeSoulField(import.meta.env.VITE_COPYCAT_SOUL_TEXT)
   const identity = normalizeSoulField(import.meta.env.VITE_COPYCAT_SOUL_IDENTITY)
   const style = normalizeSoulField(import.meta.env.VITE_COPYCAT_SOUL_STYLE)
   const preferences = normalizeSoulField(import.meta.env.VITE_COPYCAT_SOUL_PREFERENCES)
@@ -363,18 +369,18 @@ function buildDevSoulProfile(): SoulProfile | null {
   const terms = normalizeSoulField(import.meta.env.VITE_COPYCAT_SOUL_TERMS)
   const notes = normalizeSoulField(import.meta.env.VITE_COPYCAT_SOUL_NOTES)
 
-  if (!identity && !style && !preferences && !avoidances && !terms && !notes) {
-    return null
+  if (text) {
+    return text
   }
 
-  return {
+  return [
     identity,
     style,
     preferences,
     avoidances,
     terms,
     notes,
-  }
+  ].filter(Boolean).join('\n')
 }
 
 function parseBooleanEnv(value: unknown): boolean | undefined {
@@ -401,12 +407,6 @@ function mergeSettingsPatch(current: Settings, patch: SettingsPatch): Partial<Se
       : {
           ...current.soul,
           ...patch.soul,
-          profile: patch.soul.profile === undefined
-            ? current.soul.profile
-            : {
-                ...current.soul.profile,
-                ...patch.soul.profile,
-              },
         },
   }
 }

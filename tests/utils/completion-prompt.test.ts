@@ -1,39 +1,29 @@
-import type { Settings } from '~/types'
 import { describe, expect, it } from 'vitest'
 import { buildSoulContext, buildSoulProjection } from '~/soul'
 import {
   buildCompletionUserPrompt,
 } from '~/utils/completion/prompt'
 
-const baseSoulSettings: Settings['soul'] = {
-  enabled: true,
-  profile: {
-    identity: '用户主要在做浏览器插件和 AI 输入体验。',
-    style: '表达直接，偏中文技术写作。',
-    preferences: '优先给结论，再展开必要细节。',
-    avoidances: '不要套话，不要营销语气。',
-    terms: 'ghost text、semantic recall、rerank',
-    notes: '默认更关注工程取舍和实际可落地方案。',
-  },
-}
+const baseSoulText = [
+  '用户主要在做浏览器插件和 AI 输入体验。',
+  '表达直接，偏中文技术写作。',
+  '优先给结论，再展开必要细节。',
+  '不要套话，不要营销语气。',
+  '常用术语：ghost text、semantic recall、rerank。',
+].join('\n')
 
 describe('buildSoulContext', () => {
-  it('projects explicit soul fields into layered prompt blocks with application rules', () => {
+  it('projects pinned soul text with application rules', () => {
     expect(buildSoulContext({
       enabled: true,
-      explicit: baseSoulSettings.profile,
+      text: baseSoulText,
     })).toBe(
-      '[Role Context]\n'
-      + '用户主要在做浏览器插件和 AI 输入体验。\n\n'
-      + '[Writing Preferences]\n'
-      + '- 表达直接，偏中文技术写作。\n'
-      + '- 优先给结论，再展开必要细节。\n\n'
-      + '[Hard Constraints]\n'
-      + '- 不要套话，不要营销语气。\n\n'
-      + '[Preferred Terms]\n'
-      + '- ghost text、semantic recall、rerank\n\n'
-      + '[Additional Notes]\n'
-      + '默认更关注工程取舍和实际可落地方案。\n\n'
+      '[Pinned Soul]\n'
+      + '用户主要在做浏览器插件和 AI 输入体验。\n'
+      + '表达直接，偏中文技术写作。\n'
+      + '优先给结论，再展开必要细节。\n'
+      + '不要套话，不要营销语气。\n'
+      + '常用术语：ghost text、semantic recall、rerank。\n\n'
       + '[Application Rules]\n'
       + '- Apply these Soul cues only when they are naturally relevant to the current prefix.\n'
       + '- Prefer influencing wording, structure, and terminology choices instead of restating these cues.\n'
@@ -41,91 +31,55 @@ describe('buildSoulContext', () => {
     )
   })
 
-  it('returns an empty string when soul is disabled or all fields are empty', () => {
+  it('returns an empty string when soul is disabled or empty', () => {
     expect(buildSoulContext({
       enabled: false,
-      explicit: baseSoulSettings.profile,
+      text: baseSoulText,
     })).toBe('')
 
     expect(buildSoulContext({
       enabled: true,
-      explicit: {
-        identity: '',
-        style: '',
-        preferences: '',
-        avoidances: '',
-        terms: '',
-        notes: '',
-      },
+      text: '',
     })).toBe('')
   })
 
-  it('splits multi-line textarea fields into multiple list items', () => {
-    expect(buildSoulContext({
-      enabled: true,
-      explicit: {
-        identity: '',
-        style: '表达直接\n少废话',
-        preferences: '先给结论',
-        avoidances: '不要套话\n不要营销语气',
-        terms: 'ghost text\nsemantic recall',
-        notes: '',
-      },
-    })).toContain(
-      '[Writing Preferences]\n- 表达直接\n- 少废话\n- 先给结论\n\n'
-      + '[Hard Constraints]\n- 不要套话\n- 不要营销语气\n\n'
-      + '[Preferred Terms]\n- ghost text\n- semantic recall',
-    )
-  })
-
-  it('preserves hard constraints before trimming low-priority notes', () => {
+  it('preserves pinned soul text before trimming lower-priority observed cues', () => {
     const soulContext = buildSoulContext({
       enabled: true,
-      explicit: {
-        identity: '用户主要在做浏览器插件和 AI 输入体验。',
-        style: '',
-        preferences: '',
-        avoidances: '不要套话，不要营销语气。',
-        terms: '',
-        notes: Array.from({ length: 120 }, (_, index) => `额外备注 ${index + 1}：保持内容尽量具体。`).join('\n'),
+      text: '不要套话，不要营销语气。',
+      learned: {
+        preferences: Array.from({ length: 120 }, (_, index) => `观察到的偏好 ${index + 1}：保持内容尽量具体。`),
+        avoidances: [],
+        terms: [],
       },
     })
 
-    expect(soulContext).toContain('[Hard Constraints]\n- 不要套话，不要营销语气。')
-    expect(soulContext).toContain('[Additional Notes]\n')
-    expect(soulContext).not.toContain('额外备注 120：保持内容尽量具体。')
+    expect(soulContext).toContain('[Pinned Soul]\n不要套话，不要营销语气。')
+    expect(soulContext).toContain('[Observed Preferences]\n')
+    expect(soulContext).not.toContain('观察到的偏好 120：保持内容尽量具体。')
   })
 
   it('keeps a stable output order after budget selection', () => {
     const soulContext = buildSoulContext({
       enabled: true,
-      explicit: {
-        identity: '资深工程师',
-        style: '表达直接',
-        preferences: '先给结论',
-        avoidances: '不要套话',
-        terms: 'ghost text',
-        notes: Array.from({ length: 80 }, (_, index) => `补充说明 ${index + 1}`).join('\n'),
+      text: '资深工程师\n表达直接',
+      learned: {
+        preferences: ['Lead with the answer before adding context.'],
+        avoidances: ['Avoid hype, promotional language, and exaggerated claims.'],
+        terms: ['ghost text'],
       },
     })
 
-    expect(soulContext.indexOf('[Writing Preferences]')).toBeGreaterThan(soulContext.indexOf('[Role Context]'))
-    expect(soulContext.indexOf('[Hard Constraints]')).toBeGreaterThan(soulContext.indexOf('[Writing Preferences]'))
-    expect(soulContext.indexOf('[Preferred Terms]')).toBeGreaterThan(soulContext.indexOf('[Hard Constraints]'))
-    expect(soulContext.indexOf('[Application Rules]')).toBeGreaterThan(soulContext.indexOf('[Preferred Terms]'))
+    expect(soulContext.indexOf('[Observed Preferences]')).toBeGreaterThan(soulContext.indexOf('[Pinned Soul]'))
+    expect(soulContext.indexOf('[Observed Avoidances]')).toBeGreaterThan(soulContext.indexOf('[Observed Preferences]'))
+    expect(soulContext.indexOf('[Observed Terms]')).toBeGreaterThan(soulContext.indexOf('[Observed Avoidances]'))
+    expect(soulContext.indexOf('[Application Rules]')).toBeGreaterThan(soulContext.indexOf('[Observed Terms]'))
   })
 
   it('always retains application rules when soul content is truncated', () => {
     const soulContext = buildSoulContext({
       enabled: true,
-      explicit: {
-        identity: '用户主要在做浏览器插件和 AI 输入体验。',
-        style: '表达直接',
-        preferences: '先给结论',
-        avoidances: '不要套话',
-        terms: 'ghost text',
-        notes: Array.from({ length: 200 }, () => '这是一段很长的附加说明，用来触发 Soul 预算裁剪。').join('\n'),
-      },
+      text: Array.from({ length: 200 }).fill('这是一段很长的固定 Soul，用来触发预算裁剪。').join('\n'),
     })
 
     expect(soulContext).toContain('[Application Rules]')
@@ -135,13 +89,11 @@ describe('buildSoulContext', () => {
   it('returns budget metadata for included, dropped, and trimmed soul blocks', () => {
     const projection = buildSoulProjection({
       enabled: true,
-      explicit: {
-        identity: '用户主要在做浏览器插件和 AI 输入体验。',
-        style: '表达直接',
-        preferences: '先给结论',
-        avoidances: '不要套话',
-        terms: 'ghost text',
-        notes: Array.from({ length: 120 }, (_, index) => `额外备注 ${index + 1}：保持内容尽量具体。`).join('\n'),
+      text: Array.from({ length: 120 }, (_, index) => `固定 Soul ${index + 1}：保持内容尽量具体。`).join('\n'),
+      learned: {
+        preferences: ['Lead with the answer before adding context.'],
+        avoidances: ['Avoid hype, promotional language, and exaggerated claims.'],
+        terms: ['ghost text'],
       },
     })
 
@@ -149,25 +101,18 @@ describe('buildSoulContext', () => {
     expect(projection.meta.reservedChars).toBeGreaterThan(0)
     expect(projection.meta.usedChars).toBe(projection.context.length)
     expect(projection.meta.truncated).toBe(true)
-    expect(projection.meta.includedBlocks).toContain('Hard Constraints')
+    expect(projection.meta.includedBlocks).toContain('Pinned Soul')
     expect(projection.meta.includedBlocks).toContain('Application Rules')
     expect(projection.meta.trimmedBlocks).toContainEqual({
-      label: 'Additional Notes',
+      label: 'Pinned Soul',
       wasDropped: false,
     })
   })
 
-  it('includes learned soul blocks after explicit soul blocks', () => {
+  it('includes observed soul blocks after pinned soul text', () => {
     const context = buildSoulContext({
       enabled: true,
-      explicit: {
-        identity: '用户主要在做浏览器插件和 AI 输入体验。',
-        style: '',
-        preferences: '先给结论',
-        avoidances: '',
-        terms: '',
-        notes: '',
-      },
+      text: '用户主要在做浏览器插件和 AI 输入体验。',
       learned: {
         preferences: ['Lead with the answer when it fits naturally.'],
         avoidances: ['Avoid hype, promotional language, and exaggerated claims.'],
@@ -175,9 +120,9 @@ describe('buildSoulContext', () => {
       },
     })
 
-    expect(context).toContain('[Learned Preferences]\n- Lead with the answer when it fits naturally.')
-    expect(context).toContain('[Learned Avoidances]\n- Avoid hype, promotional language, and exaggerated claims.')
-    expect(context).toContain('[Learned Terms]\n- rag')
+    expect(context).toContain('[Observed Preferences]\n- Lead with the answer when it fits naturally.')
+    expect(context).toContain('[Observed Avoidances]\n- Avoid hype, promotional language, and exaggerated claims.')
+    expect(context).toContain('[Observed Terms]\n- rag')
   })
 })
 
@@ -185,7 +130,7 @@ describe('buildCompletionUserPrompt', () => {
   it('injects soul before knowledge and prefix blocks', () => {
     const soulContext = buildSoulContext({
       enabled: true,
-      explicit: baseSoulSettings.profile,
+      text: baseSoulText,
     })
 
     expect(buildCompletionUserPrompt({
