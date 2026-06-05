@@ -1,17 +1,17 @@
 import type { SoulBlock } from './profile'
 import type {
   DistilledSoulCue,
-  LearnedSoulProfile,
+  ObservedSoulProfile,
   SoulObservedSignal,
 } from '~/types'
 
 export function distillSoulSignals(
   signals: SoulObservedSignal[],
 ): {
-  profile: LearnedSoulProfile
+  profile: ObservedSoulProfile
   cues: DistilledSoulCue[]
 } {
-  const profile: LearnedSoulProfile = {
+  const profile: ObservedSoulProfile = {
     preferences: [],
     avoidances: [],
     terms: [],
@@ -83,7 +83,7 @@ export function distillSoulSignals(
   }
 }
 
-export function buildLearnedSoulBlocks(profile: LearnedSoulProfile): SoulBlock[] {
+export function buildObservedSoulBlocks(profile: ObservedSoulProfile): SoulBlock[] {
   const blocks: SoulBlock[] = []
 
   if (profile.preferences.length > 0) {

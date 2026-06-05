@@ -1,4 +1,4 @@
-export { buildLearnedSoulBlocks, distillSoulSignals } from './distill'
+export { buildObservedSoulBlocks, distillSoulSignals } from './distill'
 export { buildPinnedSoulBlocks } from './profile'
 export { buildSoulContext, buildSoulProjection } from './prompt'
 export {

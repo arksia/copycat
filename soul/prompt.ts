@@ -1,10 +1,10 @@
 import type { SoulBlock } from './profile'
 import type {
-  LearnedSoulProfile,
+  ObservedSoulProfile,
   SoulBudgetMeta,
   SoulProjectionInput,
 } from '~/types'
-import { buildLearnedSoulBlocks } from './distill'
+import { buildObservedSoulBlocks } from './distill'
 import { buildPinnedSoulBlocks } from './profile'
 
 const BLOCK_SEPARATOR = '\n\n'
@@ -47,7 +47,7 @@ export function buildSoulProjection(input: SoulProjectionInput): SoulProjection 
 
   const blocks = mergeSoulBlocks(
     buildPinnedSoulBlocks(input.text),
-    buildLearnedSoulBlocks(input.learned ?? buildEmptyLearnedSoulProfile()),
+    buildObservedSoulBlocks(input.observed ?? buildEmptyObservedSoulProfile()),
   )
   if (blocks.length === 0) {
     return buildEmptySoulProjection()
@@ -116,8 +116,8 @@ function buildApplicationRulesBlock(): SoulBlock {
   }
 }
 
-function mergeSoulBlocks(explicitBlocks: SoulBlock[], learnedBlocks: SoulBlock[]): SoulBlock[] {
-  return [...explicitBlocks, ...learnedBlocks]
+function mergeSoulBlocks(explicitBlocks: SoulBlock[], observedBlocks: SoulBlock[]): SoulBlock[] {
+  return [...explicitBlocks, ...observedBlocks]
 }
 
 function fitSoulBlocksWithinBudget(blocks: SoulBlock[], budget: number): {
@@ -297,7 +297,7 @@ function buildEmptySoulProjection(): SoulProjection {
   }
 }
 
-function buildEmptyLearnedSoulProfile(): LearnedSoulProfile {
+function buildEmptyObservedSoulProfile(): ObservedSoulProfile {
   return {
     preferences: [],
     avoidances: [],

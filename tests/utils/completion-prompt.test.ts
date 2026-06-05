@@ -47,7 +47,7 @@ describe('buildSoulContext', () => {
     const soulContext = buildSoulContext({
       enabled: true,
       text: '不要套话，不要营销语气。',
-      learned: {
+      observed: {
         preferences: Array.from({ length: 120 }, (_, index) => `观察到的偏好 ${index + 1}：保持内容尽量具体。`),
         avoidances: [],
         terms: [],
@@ -63,7 +63,7 @@ describe('buildSoulContext', () => {
     const soulContext = buildSoulContext({
       enabled: true,
       text: '资深工程师\n表达直接',
-      learned: {
+      observed: {
         preferences: ['Lead with the answer before adding context.'],
         avoidances: ['Avoid hype, promotional language, and exaggerated claims.'],
         terms: ['ghost text'],
@@ -90,7 +90,7 @@ describe('buildSoulContext', () => {
     const projection = buildSoulProjection({
       enabled: true,
       text: Array.from({ length: 120 }, (_, index) => `固定 Soul ${index + 1}：保持内容尽量具体。`).join('\n'),
-      learned: {
+      observed: {
         preferences: ['Lead with the answer before adding context.'],
         avoidances: ['Avoid hype, promotional language, and exaggerated claims.'],
         terms: ['ghost text'],
@@ -113,7 +113,7 @@ describe('buildSoulContext', () => {
     const context = buildSoulContext({
       enabled: true,
       text: '用户主要在做浏览器插件和 AI 输入体验。',
-      learned: {
+      observed: {
         preferences: ['Lead with the answer when it fits naturally.'],
         avoidances: ['Avoid hype, promotional language, and exaggerated claims.'],
         terms: ['rag'],

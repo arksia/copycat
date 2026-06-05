@@ -32,7 +32,7 @@ function buildSignal(overrides: Partial<SoulObservedSignal> & Pick<SoulObservedS
 }
 
 describe('distillSoulSignals', () => {
-  it('distills learned preferences, avoidances, and terms from mature signals', () => {
+  it('distills observed preferences, avoidances, and terms from mature signals', () => {
     const result = distillSoulSignals([
       buildSignal({
         id: 'signal-1',
@@ -59,7 +59,7 @@ describe('distillSoulSignals', () => {
     expect(result.cues).toHaveLength(3)
   })
 
-  it('deduplicates repeated learned values', () => {
+  it('deduplicates repeated observed values', () => {
     const result = distillSoulSignals([
       buildSignal({
         id: 'signal-1',
@@ -76,7 +76,7 @@ describe('distillSoulSignals', () => {
     expect(result.profile.terms).toEqual(['rag'])
   })
 
-  it('distills observed structure signals into learned preferences', () => {
+  it('distills observed structure signals into observed preferences', () => {
     const result = distillSoulSignals([
       buildSignal({
         id: 'signal-1',

@@ -3,7 +3,7 @@ import type {
   CompletionRequest,
   CompletionResponse,
   KnowledgeChunkEmbedding,
-  LearnedSoulProfile,
+  ObservedSoulProfile,
 } from '~/types'
 import {
   mergeCompletionContext,
@@ -122,7 +122,7 @@ export function createBackgroundCompletionService(args: {
     const soulProjection = resolveRuntimeSoulProjection({
       enabled: settings.soul.enabled,
       text: settings.soul.text,
-      learnedProfile: distilledSoul.profile,
+      observedProfile: distilledSoul.profile,
     })
     const soulContext = soulProjection.context
     const cacheKey = buildCompletionCacheKey({
@@ -248,16 +248,16 @@ export function createBackgroundCompletionService(args: {
             context: soulContext,
             enabled: settings.soul.enabled,
             budget: soulProjection.meta,
-            explicitContext: buildSoulProjection({
+            pinnedContext: buildSoulProjection({
               enabled: settings.soul.enabled,
               text: settings.soul.text,
             }).context,
-            learnedContext: buildSoulProjection({
+            observedContext: buildSoulProjection({
               enabled: settings.soul.enabled,
               text: '',
-              learned: distilledSoul.profile,
+              observed: distilledSoul.profile,
             }).context,
-            learnedProfile: distilledSoul.profile,
+            observedProfile: distilledSoul.profile,
             observedSignalCount: matureSoulSignals.length,
           },
           soulSignals: soulSignals === undefined
@@ -340,12 +340,12 @@ export function createBackgroundCompletionService(args: {
 function resolveRuntimeSoulProjection(args: {
   enabled: boolean
   text: string
-  learnedProfile: LearnedSoulProfile
+  observedProfile: ObservedSoulProfile
 }) {
   return buildSoulProjection({
     enabled: args.enabled,
     text: args.text,
-    learned: args.learnedProfile,
+    observed: args.observedProfile,
   })
 }
 

@@ -571,7 +571,7 @@ async function runKnowledgeSearch() {
             placeholder="Example: I build browser extensions and AI input tools. Prefer direct, practical continuations. Lead with the point. Avoid marketing language. Preserve project terms like ghost text and semantic recall."
           />
           <p class="mt-2 text-xs text-neutral-500">
-            This is the only manual Soul input. Learned cues stay invisible and only shape completions when learning is enabled.
+            This is the only manual Soul input. Observed cues stay invisible and only shape completions when learning is enabled.
           </p>
         </div>
 

@@ -40,9 +40,9 @@ export interface BuildCompletionDebugInfoArgs {
     context: string
     enabled: boolean
     budget?: CompletionDebugInfo['soulBudget']
-    explicitContext?: CompletionDebugInfo['soulExplicitContext']
-    learnedContext?: CompletionDebugInfo['soulLearnedContext']
-    learnedProfile?: CompletionDebugInfo['soulLearnedProfile']
+    pinnedContext?: CompletionDebugInfo['soulPinnedContext']
+    observedContext?: CompletionDebugInfo['soulObservedContext']
+    observedProfile?: CompletionDebugInfo['soulObservedProfile']
     observedSignalCount?: CompletionDebugInfo['soulObservedSignalCount']
   }
   soulSignals?: CompletionDebugInfo['soulSignals']
@@ -86,9 +86,9 @@ export function buildCompletionDebugInfo(
       text: chunk.text,
     })),
     soulContext: args.soul?.context ?? debug.soulContext,
-    soulExplicitContext: args.soul?.explicitContext ?? debug.soulExplicitContext,
-    soulLearnedContext: args.soul?.learnedContext ?? debug.soulLearnedContext,
-    soulLearnedProfile: args.soul?.learnedProfile ?? debug.soulLearnedProfile,
+    soulPinnedContext: args.soul?.pinnedContext ?? debug.soulPinnedContext,
+    soulObservedContext: args.soul?.observedContext ?? debug.soulObservedContext,
+    soulObservedProfile: args.soul?.observedProfile ?? debug.soulObservedProfile,
     soulObservedSignalCount: args.soul?.observedSignalCount ?? debug.soulObservedSignalCount,
     soulEnabled: (args.soul?.context ?? debug.soulContext ?? '').length > 0,
     soulConfigured: args.soul?.enabled ?? debug.soulConfigured,

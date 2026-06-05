@@ -1,28 +1,26 @@
 <script setup lang="ts">
 import type { CompletionDebugInfo, CompletionEvent, CompletionResponse, Settings } from '~/types'
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { GhostTextOverlay, syncPlaygroundGhostText } from '~/integrations/overlay/ghost-text'
+import { supportsInlineCompletion } from '~/utils/completion/position'
 import {
   buildCompletionFingerprint,
   buildCompletionSignalKey,
 } from '~/utils/completion/request'
-import { supportsInlineCompletion } from '~/utils/completion/position'
+import {
+  buildStageActivityLines,
+  shouldPreferEnhancedCompletion,
+  shouldRequestEnhancedStage,
+  summarizeEnhancedOutcome,
+} from '~/utils/completion/staging'
 import {
   createCompletionTriggerMemory,
   evaluateCompletionTrigger,
 } from '~/utils/completion/trigger'
 import { debounce, nextId } from '~/utils/core/base'
-import { openSettingsPage, sendRuntimeMessage } from '~/utils/runtime'
-import { GhostTextOverlay, syncPlaygroundGhostText } from '~/integrations/overlay/ghost-text'
 import { PROVIDER_PRESETS } from '~/utils/providers'
-import {
-  buildStageActivityLines,
-  summarizeEnhancedOutcome,
-} from '~/utils/completion/staging'
+import { openSettingsPage, sendRuntimeMessage } from '~/utils/runtime'
 import { loadSettings } from '~/utils/settings'
-import {
-  shouldPreferEnhancedCompletion,
-  shouldRequestEnhancedStage,
-} from '~/utils/completion/staging'
 
 const PLAYGROUND_SIGNAL_KEY = buildCompletionSignalKey('playground', 'textarea')
 const ghostOverlay = new GhostTextOverlay()
@@ -45,9 +43,9 @@ const debugSystemPrompt = ref('')
 const debugPromptLayers = ref('')
 const debugSoulSignals = ref('')
 const debugSoulContext = ref('')
-const debugSoulExplicitContext = ref('')
-const debugSoulLearnedContext = ref('')
-const debugSoulLearnedProfile = ref('')
+const debugSoulPinnedContext = ref('')
+const debugSoulObservedContext = ref('')
+const debugSoulObservedProfile = ref('')
 const debugSoulObservedSignalCount = ref(0)
 const debugKnowledgeContext = ref('')
 const debugKnowledgeBudget = ref('')
@@ -171,18 +169,32 @@ const parsedSoulSignals = computed(() => {
     return null
   }
 })
-const parsedSoulLearnedProfile = computed(() => {
-  if (!debugSoulLearnedProfile.value) {
+const parsedSoulObservedProfile = computed(() => {
+  if (!debugSoulObservedProfile.value) {
     return null
   }
 
   try {
-    return JSON.parse(debugSoulLearnedProfile.value) as CompletionDebugInfo['soulLearnedProfile']
+    return JSON.parse(debugSoulObservedProfile.value) as CompletionDebugInfo['soulObservedProfile']
   }
   catch {
     return null
   }
 })
+const parsedSoulBudget = computed(() => {
+  if (!debugSoulBudget.value) {
+    return null
+  }
+
+  try {
+    return JSON.parse(debugSoulBudget.value) as CompletionDebugInfo['soulBudget']
+  }
+  catch {
+    return null
+  }
+})
+const previewPrefix = computed(() => draft.value.slice(0, getCaretIndex()))
+const previewSuffix = computed(() => draft.value.slice(getCaretIndex()))
 const knowledgeBudgetSummary = computed(() => {
   const budget = parsedPromptLayers.value?.knowledge?.budget ?? parsedKnowledgeBudget.value
   if (budget === null || budget === undefined) {
@@ -218,24 +230,24 @@ const soulHighlights = computed(() => {
     },
   ]
 })
-const learnedSoulHighlights = computed(() => {
-  const learnedProfile = parsedSoulLearnedProfile.value
-  if (learnedProfile === null && !debugSoulLearnedContext.value) {
+const observedSoulHighlights = computed(() => {
+  const observedProfile = parsedSoulObservedProfile.value
+  if (observedProfile === null && !debugSoulObservedContext.value) {
     return []
   }
 
   return [
     {
       label: 'Preferences',
-      value: String(learnedProfile?.preferences.length ?? 0),
+      value: String(observedProfile?.preferences.length ?? 0),
     },
     {
       label: 'Avoidances',
-      value: String(learnedProfile?.avoidances.length ?? 0),
+      value: String(observedProfile?.avoidances.length ?? 0),
     },
     {
       label: 'Terms',
-      value: String(learnedProfile?.terms.length ?? 0),
+      value: String(observedProfile?.terms.length ?? 0),
     },
   ]
 })
@@ -278,13 +290,13 @@ const debugSections = computed(() => [
     open: true,
   },
   {
-    key: 'learned-soul',
-    title: 'Learned Soul',
-    summary: parsedSoulLearnedProfile.value
-      ? `${parsedSoulLearnedProfile.value.preferences.length} prefs · ${parsedSoulLearnedProfile.value.terms.length} terms`
-      : debugSoulLearnedContext.value
-        ? 'learned context available'
-        : 'no learned soul yet',
+    key: 'observed-soul',
+    title: 'Observed Soul',
+    summary: parsedSoulObservedProfile.value
+      ? `${parsedSoulObservedProfile.value.preferences.length} prefs · ${parsedSoulObservedProfile.value.terms.length} terms`
+      : debugSoulObservedContext.value
+        ? 'observed context available'
+        : 'no observed soul yet',
     open: false,
   },
   {
@@ -361,9 +373,9 @@ const debugSummaryGroups = computed(() => [
     empty: 'No soul data yet.',
   },
   {
-    title: 'Learned Soul',
-    items: learnedSoulHighlights.value,
-    empty: 'No learned Soul data yet.',
+    title: 'Observed Soul',
+    items: observedSoulHighlights.value,
+    empty: 'No observed Soul data yet.',
   },
   {
     title: 'Observed signals',
@@ -376,19 +388,6 @@ const debugSummaryGroups = computed(() => [
     empty: 'No knowledge data yet.',
   },
 ])
-const parsedSoulBudget = computed(() => {
-  if (!debugSoulBudget.value) {
-    return null
-  }
-
-  try {
-    return JSON.parse(debugSoulBudget.value) as CompletionDebugInfo['soulBudget']
-  }
-  catch {
-    return null
-  }
-})
-
 const debouncedRequest = debounce(() => {
   void requestCompletion()
 }, 250)
@@ -409,8 +408,6 @@ onBeforeUnmount(() => {
   ghostOverlay.dispose()
 })
 
-const previewPrefix = computed(() => draft.value.slice(0, getCaretIndex()))
-const previewSuffix = computed(() => draft.value.slice(getCaretIndex()))
 const canRequest = computed(() => {
   if (!settings.value)
     return false
@@ -449,7 +446,7 @@ function logFlow(event: string, extra: Record<string, unknown> = {}) {
     suffixLength: previewSuffix.value.length,
     ...extra,
   }
-  console.debug('[copycat][flow]', event, payload)
+  console.warn('[copycat][flow]', event, payload)
   const line = `${event} ${JSON.stringify(payload)}`
   flowLogs.value = [line, ...flowLogs.value].slice(0, 40)
 }
@@ -551,7 +548,7 @@ async function requestCompletion() {
   stageEnhancedRequested.value = false
   logFlow('request-send-fast', {
     fingerprint,
-    requestId: requestId,
+    requestId,
   })
 
   try {
@@ -867,10 +864,10 @@ function assignDebugState(debug: CompletionResponse['debug']) {
     ? JSON.stringify(debug.appliedStrategy, null, 2)
     : ''
   debugSoulContext.value = debug?.soulContext ?? ''
-  debugSoulExplicitContext.value = debug?.soulExplicitContext ?? ''
-  debugSoulLearnedContext.value = debug?.soulLearnedContext ?? ''
-  debugSoulLearnedProfile.value = debug?.soulLearnedProfile
-    ? JSON.stringify(debug.soulLearnedProfile, null, 2)
+  debugSoulPinnedContext.value = debug?.soulPinnedContext ?? ''
+  debugSoulObservedContext.value = debug?.soulObservedContext ?? ''
+  debugSoulObservedProfile.value = debug?.soulObservedProfile
+    ? JSON.stringify(debug.soulObservedProfile, null, 2)
     : ''
   debugSoulObservedSignalCount.value = debug?.soulObservedSignalCount ?? 0
   debugSoulEnabled.value = debug?.soulEnabled ?? false
@@ -904,9 +901,9 @@ function clearDebugState() {
   debugSoulSignals.value = ''
   debugAppliedStrategy.value = ''
   debugSoulContext.value = ''
-  debugSoulExplicitContext.value = ''
-  debugSoulLearnedContext.value = ''
-  debugSoulLearnedProfile.value = ''
+  debugSoulPinnedContext.value = ''
+  debugSoulObservedContext.value = ''
+  debugSoulObservedProfile.value = ''
   debugSoulObservedSignalCount.value = 0
   debugSoulEnabled.value = false
   debugSoulConfigured.value = false
@@ -1239,8 +1236,8 @@ function openOptions() {
                     </div>
                   </div>
                   <div>
-                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Explicit soul context</div>
-                    <pre class="max-h-48 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulExplicitContext || '(empty)' }}</pre>
+                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Pinned soul context</div>
+                    <pre class="max-h-48 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulPinnedContext || '(empty)' }}</pre>
                   </div>
                   <div>
                     <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Merged soul context</div>
@@ -1252,28 +1249,28 @@ function openOptions() {
                   </div>
                 </div>
 
-                <div v-else-if="section.key === 'learned-soul'" class="grid gap-4 border-t border-neutral-200 p-4">
+                <div v-else-if="section.key === 'observed-soul'" class="grid gap-4 border-t border-neutral-200 p-4">
                   <div class="grid gap-3 sm:grid-cols-3">
                     <div class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
                       <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Preferences</div>
-                      <div class="mt-1 text-sm text-neutral-900">{{ parsedSoulLearnedProfile?.preferences.length ?? 0 }}</div>
+                      <div class="mt-1 text-sm text-neutral-900">{{ parsedSoulObservedProfile?.preferences.length ?? 0 }}</div>
                     </div>
                     <div class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
                       <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Avoidances</div>
-                      <div class="mt-1 text-sm text-neutral-900">{{ parsedSoulLearnedProfile?.avoidances.length ?? 0 }}</div>
+                      <div class="mt-1 text-sm text-neutral-900">{{ parsedSoulObservedProfile?.avoidances.length ?? 0 }}</div>
                     </div>
                     <div class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
                       <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Terms</div>
-                      <div class="mt-1 text-sm text-neutral-900">{{ parsedSoulLearnedProfile?.terms.length ?? 0 }}</div>
+                      <div class="mt-1 text-sm text-neutral-900">{{ parsedSoulObservedProfile?.terms.length ?? 0 }}</div>
                     </div>
                   </div>
                   <div>
-                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Learned soul context</div>
-                    <pre class="max-h-48 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulLearnedContext || '(empty)' }}</pre>
+                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Observed soul context</div>
+                    <pre class="max-h-48 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulObservedContext || '(empty)' }}</pre>
                   </div>
                   <div>
-                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Learned soul profile</div>
-                    <pre class="max-h-56 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulLearnedProfile || '(empty)' }}</pre>
+                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Observed soul profile</div>
+                    <pre class="max-h-56 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulObservedProfile || '(empty)' }}</pre>
                   </div>
                 </div>
 

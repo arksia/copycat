@@ -4,7 +4,7 @@ export type ThinkingControlMode
     | 'reasoning_effort_none'
     | 'thinking_disabled'
 
-export interface LearnedSoulProfile {
+export interface ObservedSoulProfile {
   preferences: string[]
   avoidances: string[]
   terms: string[]
@@ -77,7 +77,7 @@ export interface SoulObservedSignalSnapshot {
 export interface SoulProjectionInput {
   enabled: boolean
   text: string
-  learned?: LearnedSoulProfile
+  observed?: ObservedSoulProfile
 }
 
 export interface SettingsPatch extends Partial<Omit<Settings, 'soul'>> {
@@ -200,9 +200,9 @@ export interface CompletionDebugInfo {
     }>
   }
   soulContext?: string
-  soulExplicitContext?: string
-  soulLearnedContext?: string
-  soulLearnedProfile?: LearnedSoulProfile
+  soulPinnedContext?: string
+  soulObservedContext?: string
+  soulObservedProfile?: ObservedSoulProfile
   soulObservedSignalCount?: number
   soulEnabled?: boolean
   soulConfigured?: boolean
