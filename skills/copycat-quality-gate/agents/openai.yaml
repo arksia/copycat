@@ -1,0 +1,4 @@
+interface:
+  display_name: "Copycat Quality Gate"
+  short_description: "Verify Copycat changes before completion, commit, or review."
+  default_prompt: "Use this skill before claiming a Copycat change is complete, committing substantial work, or requesting review."

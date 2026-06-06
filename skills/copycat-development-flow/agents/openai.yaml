@@ -1,0 +1,4 @@
+interface:
+  display_name: "Copycat Development Flow"
+  short_description: "Plan Copycat development work with a clear finish line and verification path."
+  default_prompt: "Use this skill for non-trivial Copycat implementation planning, including scope, acceptance checks, and verification."

@@ -8,6 +8,7 @@ This file is meant to be used as an execution guide, not as a loose preference l
 
 - `copycat` is a browser extension built with WXT, Vue 3, and TypeScript.
 - The current product focus is remote OpenAI-compatible autocomplete.
+- Project-level Codex skills live under `skills/`. Use them as repository-specific execution guides when their frontmatter description matches the task.
 - The main runtime surfaces are:
   - `entrypoints/background.ts`: request orchestration, caching, cancellation, settings RPC.
   - `entrypoints/content.ts`: site integration and injection lifecycle.
@@ -220,3 +221,4 @@ Before finishing, verify:
 - Keep `AGENTS.md` aligned with how the repository is actually being developed.
 - Do not copy broad template rules blindly if they do not fit this repo.
 - When project conventions change, update this file in the same task or immediately after.
+- Keep `skills/` concise and project-specific. Add or update a skill when a workflow becomes repeated enough that future agents should follow it.

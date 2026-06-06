@@ -1,0 +1,4 @@
+interface:
+  display_name: "Copycat Docs Authoring"
+  short_description: "Write Copycat specs, plans, and decision notes."
+  default_prompt: "Use this skill when writing or updating Copycat product docs, implementation plans, decisions, or process documentation."

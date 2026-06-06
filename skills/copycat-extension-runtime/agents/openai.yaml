@@ -1,0 +1,4 @@
+interface:
+  display_name: "Copycat Extension Runtime"
+  short_description: "Work on Copycat extension runtime surfaces with contract and build discipline."
+  default_prompt: "Use this skill when changing Copycat background, content, options, popup, playground, runtime messages, storage, or packaged behavior."
