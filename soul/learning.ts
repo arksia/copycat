@@ -8,6 +8,7 @@ import {
 
 const SOUL_LEARNING_MIN_EVENTS = 12
 const SOUL_LEARNING_MAX_EVENTS = 24
+const SOUL_LEARNING_MAX_EVENTS_PER_ACTION = 8
 const SOUL_LEARNING_MAX_TEXT_CHARS = 1600
 
 const SOUL_LEARNING_SYSTEM_PROMPT = `You maintain Copycat's Soul text from accepted and rejected autocomplete events.
@@ -56,9 +57,7 @@ export function buildSoulLearningPrompt(args: {
   currentSoulText: string
   events: CompletionEvent[]
 }): string {
-  const events = args.events
-    .slice(0, SOUL_LEARNING_MAX_EVENTS)
-    .reverse()
+  const events = selectSoulLearningEvents(args.events)
   const acceptedEvents = events
     .filter(event => event.action === 'accepted')
     .map(formatSoulLearningEvent)
@@ -83,8 +82,11 @@ export function buildSoulLearningPrompt(args: {
     'Decide whether the Soul text should be updated.',
     'Write the full next Soul text, not a patch, notes, or explanation.',
     'Keep it short and durable.',
-    'Capture stable writing preferences, structure habits, and recurring terminology.',
-    'Ignore temporary tasks, recent topics, event descriptions, and one-off context.',
+    'Capture only stable writing preferences, structure habits, and durable wording patterns.',
+    'Treat accepted events as evidence for patterns to keep or strengthen.',
+    'Treat rejected events as evidence that the suggestion pattern was wrong and the actual continuation is a better signal.',
+    'Prefer repeated patterns over isolated events.',
+    'Ignore temporary tasks, specific topics, named entities, and one-off context from prefixes.',
     'Do not write meta commentary such as "the user prefers" or "based on recent events".',
     'Write the Soul text itself as plain guidance using short standalone lines.',
     'Keep as much of the current Soul text as possible and prefer small edits over rewrites.',
@@ -181,8 +183,55 @@ function formatSoulLearningEvent(event: CompletionEvent): string {
   })
 }
 
+function selectSoulLearningEvents(events: CompletionEvent[]): CompletionEvent[] {
+  const selected: CompletionEvent[] = []
+  const seen = new Set<string>()
+  let acceptedCount = 0
+  let rejectedCount = 0
+
+  for (const event of events) {
+    if (selected.length >= SOUL_LEARNING_MAX_EVENTS) {
+      break
+    }
+
+    const signature = [
+      event.action,
+      normalizeEventField(event.prefix),
+      normalizeEventField(event.suggestion),
+      normalizeEventField(event.actualContinuation),
+    ].join('\u0000')
+
+    if (seen.has(signature)) {
+      continue
+    }
+
+    if (event.action === 'accepted') {
+      if (acceptedCount >= SOUL_LEARNING_MAX_EVENTS_PER_ACTION) {
+        continue
+      }
+      acceptedCount += 1
+    }
+
+    if (event.action === 'rejected') {
+      if (rejectedCount >= SOUL_LEARNING_MAX_EVENTS_PER_ACTION) {
+        continue
+      }
+      rejectedCount += 1
+    }
+
+    seen.add(signature)
+    selected.push(event)
+  }
+
+  return selected.reverse()
+}
+
 function truncateForPrompt(value: string): string {
   return value.trim().slice(0, 240)
+}
+
+function normalizeEventField(value: string): string {
+  return value.trim().replace(/\s+/g, ' ')
 }
 
 function normalizeSoulLearningText(value: string): string {

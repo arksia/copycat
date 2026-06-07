@@ -100,7 +100,35 @@ describe('buildSoulLearningPrompt', () => {
     expect(prompt).toContain('"action":"rejected"')
     expect(prompt).toContain('"prefix":"帮我写一个方案"')
     expect(prompt).toContain('"actualContinuation":"直接列实现步骤。"')
+    expect(prompt).toContain('Treat rejected events as evidence that the suggestion pattern was wrong')
     expect(prompt).toContain('"nextSoulText"')
+  })
+
+  it('deduplicates repeated events and caps each action bucket', () => {
+    const prompt = buildSoulLearningPrompt({
+      currentSoulText: '保持直接。',
+      events: [
+        ...Array.from({ length: 10 }, (_, index) => buildEvent({
+          id: `accepted-dup-${index}`,
+          action: 'accepted',
+          prefix: '帮我写方案',
+          suggestion: '先给结论。',
+          actualContinuation: '先给结论。',
+          timestamp: 200 - index,
+        })),
+        ...Array.from({ length: 10 }, (_, index) => buildEvent({
+          id: `rejected-${index}`,
+          action: 'rejected',
+          prefix: `帮我写方案 ${index}`,
+          suggestion: '先写长背景。',
+          actualContinuation: `直接列步骤 ${index}`,
+          timestamp: 100 - index,
+        })),
+      ],
+    })
+
+    expect(prompt.match(/"action":"accepted"/g)?.length).toBe(1)
+    expect(prompt.match(/"action":"rejected"/g)?.length).toBe(8)
   })
 })
 
