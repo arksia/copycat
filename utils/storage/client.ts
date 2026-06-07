@@ -1,5 +1,7 @@
 import { DB_INDEXES, DB_NAME, DB_STORES, DB_VERSION } from './schema'
 
+const LEGACY_SOUL_OBSERVED_SIGNALS_STORE = 'soul-observed-signals'
+
 let activeDb: IDBDatabase | null = null
 let openPromise: Promise<IDBDatabase> | null = null
 
@@ -29,6 +31,10 @@ export async function openCopycatDb(): Promise<IDBDatabase> {
 
     request.onupgradeneeded = () => {
       const db = request.result
+      if (db.objectStoreNames.contains(LEGACY_SOUL_OBSERVED_SIGNALS_STORE)) {
+        db.deleteObjectStore(LEGACY_SOUL_OBSERVED_SIGNALS_STORE)
+      }
+
       if (!db.objectStoreNames.contains(DB_STORES.completionEvents)) {
         const completionEvents = db.createObjectStore(DB_STORES.completionEvents, {
           keyPath: 'id',
@@ -57,16 +63,6 @@ export async function openCopycatDb(): Promise<IDBDatabase> {
         })
         knowledgeChunks.createIndex(DB_INDEXES.knowledgeChunksByDocument, 'docId')
         knowledgeChunks.createIndex(DB_INDEXES.knowledgeChunksByKnowledgeBase, 'kbId')
-      }
-
-      if (!db.objectStoreNames.contains(DB_STORES.soulObservedSignals)) {
-        const soulObservedSignals = db.createObjectStore(DB_STORES.soulObservedSignals, {
-          keyPath: 'id',
-        })
-        soulObservedSignals.createIndex(DB_INDEXES.soulObservedSignalsByLastSeenAt, 'lastSeenAt')
-        soulObservedSignals.createIndex(DB_INDEXES.soulObservedSignalsByKindValue, ['kind', 'value'], {
-          unique: true,
-        })
       }
     }
 

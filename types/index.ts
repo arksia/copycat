@@ -4,19 +4,6 @@ export type ThinkingControlMode
     | 'reasoning_effort_none'
     | 'thinking_disabled'
 
-export interface ObservedSoulProfile {
-  preferences: string[]
-  avoidances: string[]
-  terms: string[]
-}
-
-export interface DistilledSoulCue {
-  kind: 'preference' | 'avoidance' | 'term'
-  value: string
-  sourceSignalIds: string[]
-  confidence: number
-}
-
 export interface SoulSettings {
   enabled: boolean
   learningEnabled: boolean
@@ -36,48 +23,9 @@ export interface SoulBudgetMeta {
   }>
 }
 
-export type SoulObservedSignalKind = 'preference' | 'avoidance' | 'term' | 'structure'
-
-export interface SoulObservedSignalEvidence {
-  action: CompletionEvent['action']
-  host: string
-  prefixPreview: string
-  suggestionPreview: string
-  suggestionLengthBucket: 'short' | 'medium' | 'long'
-  openingStructure: 'answer-first' | 'context-first' | 'list-first' | 'unknown'
-  toneHints: string[]
-  termHits: string[]
-  timestamp: number
-}
-
-export interface SoulObservedSignal {
-  id: string
-  kind: SoulObservedSignalKind
-  value: string
-  confidence: number
-  count: number
-  acceptedCount: number
-  rejectedCount: number
-  ignoredCount: number
-  distinctContextCount: number
-  firstSeenAt: number
-  lastSeenAt: number
-  lastReflectedAt?: number
-  evidence: SoulObservedSignalEvidence
-  contextKeys: string[]
-  documentIds: string[]
-}
-
-export interface SoulObservedSignalSnapshot {
-  totalCount: number
-  matureCount: number
-  signals: SoulObservedSignal[]
-}
-
 export interface SoulProjectionInput {
   enabled: boolean
   text: string
-  observed?: ObservedSoulProfile
 }
 
 export interface SettingsPatch extends Partial<Omit<Settings, 'soul'>> {
@@ -182,28 +130,8 @@ export interface CompletionDebugInfo {
       budget?: SoulBudgetMeta
     }
   }
-  soulSignals?: {
-    triggered: boolean
-    totalCount: number
-    matureCount: number
-    signals: Array<{
-      id: string
-      kind: SoulObservedSignalKind
-      value: string
-      confidence: number
-      count: number
-      acceptedCount: number
-      rejectedCount: number
-      ignoredCount: number
-      distinctContextCount: number
-      evidence: SoulObservedSignalEvidence
-    }>
-  }
   soulContext?: string
   soulPinnedContext?: string
-  soulObservedContext?: string
-  soulObservedProfile?: ObservedSoulProfile
-  soulObservedSignalCount?: number
   soulEnabled?: boolean
   soulConfigured?: boolean
   soulCharCount?: number
@@ -285,7 +213,6 @@ export type RuntimeMessage
     | { type: 'completion/event', payload: CompletionEvent }
     | { type: 'completion/events/recent', payload: { host: string, limit?: number } }
     | { type: 'completion/events/stats', payload: { host: string } }
-    | { type: 'soul/signals', payload: { limit?: number, matureOnly?: boolean } }
     | { type: 'knowledge/delete', payload: { docId: string, kbId: string } }
     | { type: 'knowledge/import', payload: KnowledgeImportRequest }
     | { type: 'knowledge/list', payload: { kbId: string } }

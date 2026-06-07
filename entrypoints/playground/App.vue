@@ -41,12 +41,8 @@ const debugRawChoice = ref('')
 const debugUserPrompt = ref('')
 const debugSystemPrompt = ref('')
 const debugPromptLayers = ref('')
-const debugSoulSignals = ref('')
 const debugSoulContext = ref('')
 const debugSoulPinnedContext = ref('')
-const debugSoulObservedContext = ref('')
-const debugSoulObservedProfile = ref('')
-const debugSoulObservedSignalCount = ref(0)
 const debugKnowledgeContext = ref('')
 const debugKnowledgeBudget = ref('')
 const debugKnowledgeQuery = ref('')
@@ -157,30 +153,6 @@ const parsedPromptLayers = computed(() => {
     return null
   }
 })
-const parsedSoulSignals = computed(() => {
-  if (!debugSoulSignals.value) {
-    return null
-  }
-
-  try {
-    return JSON.parse(debugSoulSignals.value) as CompletionDebugInfo['soulSignals']
-  }
-  catch {
-    return null
-  }
-})
-const parsedSoulObservedProfile = computed(() => {
-  if (!debugSoulObservedProfile.value) {
-    return null
-  }
-
-  try {
-    return JSON.parse(debugSoulObservedProfile.value) as CompletionDebugInfo['soulObservedProfile']
-  }
-  catch {
-    return null
-  }
-})
 const parsedSoulBudget = computed(() => {
   if (!debugSoulBudget.value) {
     return null
@@ -230,48 +202,6 @@ const soulHighlights = computed(() => {
     },
   ]
 })
-const observedSoulHighlights = computed(() => {
-  const observedProfile = parsedSoulObservedProfile.value
-  if (observedProfile === null && !debugSoulObservedContext.value) {
-    return []
-  }
-
-  return [
-    {
-      label: 'Preferences',
-      value: String(observedProfile?.preferences.length ?? 0),
-    },
-    {
-      label: 'Avoidances',
-      value: String(observedProfile?.avoidances.length ?? 0),
-    },
-    {
-      label: 'Terms',
-      value: String(observedProfile?.terms.length ?? 0),
-    },
-  ]
-})
-const soulSignalHighlights = computed(() => {
-  const signals = parsedSoulSignals.value
-  if (signals === null || signals === undefined) {
-    return []
-  }
-
-  return [
-    {
-      label: 'Observed',
-      value: String(signals.totalCount),
-    },
-    {
-      label: 'Mature',
-      value: String(signals.matureCount),
-    },
-    {
-      label: 'Top signal',
-      value: signals.signals[0] ? `${signals.signals[0].kind}:${signals.signals[0].value}` : 'none',
-    },
-  ]
-})
 const debugSections = computed(() => [
   {
     key: 'prompt',
@@ -288,24 +218,6 @@ const debugSections = computed(() => [
         ? 'configured but empty'
         : 'disabled',
     open: true,
-  },
-  {
-    key: 'observed-soul',
-    title: 'Observed Soul',
-    summary: parsedSoulObservedProfile.value
-      ? `${parsedSoulObservedProfile.value.preferences.length} prefs · ${parsedSoulObservedProfile.value.terms.length} terms`
-      : debugSoulObservedContext.value
-        ? 'observed context available'
-        : 'no observed soul yet',
-    open: false,
-  },
-  {
-    key: 'observed-signals',
-    title: 'Observed Signals',
-    summary: parsedSoulSignals.value
-      ? `${parsedSoulSignals.value.totalCount} observed · ${parsedSoulSignals.value.matureCount} mature`
-      : 'no observed signals yet',
-    open: false,
   },
   {
     key: 'knowledge',
@@ -371,16 +283,6 @@ const debugSummaryGroups = computed(() => [
     title: 'Soul',
     items: soulHighlights.value,
     empty: 'No soul data yet.',
-  },
-  {
-    title: 'Observed Soul',
-    items: observedSoulHighlights.value,
-    empty: 'No observed Soul data yet.',
-  },
-  {
-    title: 'Observed signals',
-    items: soulSignalHighlights.value,
-    empty: 'No observed Soul signals yet.',
   },
   {
     title: 'Knowledge',
@@ -857,19 +759,11 @@ function assignDebugState(debug: CompletionResponse['debug']) {
   debugPromptLayers.value = debug?.promptLayers
     ? JSON.stringify(debug.promptLayers, null, 2)
     : ''
-  debugSoulSignals.value = debug?.soulSignals
-    ? JSON.stringify(debug.soulSignals, null, 2)
-    : ''
   debugAppliedStrategy.value = debug?.appliedStrategy
     ? JSON.stringify(debug.appliedStrategy, null, 2)
     : ''
   debugSoulContext.value = debug?.soulContext ?? ''
   debugSoulPinnedContext.value = debug?.soulPinnedContext ?? ''
-  debugSoulObservedContext.value = debug?.soulObservedContext ?? ''
-  debugSoulObservedProfile.value = debug?.soulObservedProfile
-    ? JSON.stringify(debug.soulObservedProfile, null, 2)
-    : ''
-  debugSoulObservedSignalCount.value = debug?.soulObservedSignalCount ?? 0
   debugSoulEnabled.value = debug?.soulEnabled ?? false
   debugSoulConfigured.value = debug?.soulConfigured ?? false
   debugSoulCharCount.value = debug?.soulCharCount ?? 0
@@ -898,13 +792,9 @@ function assignDebugState(debug: CompletionResponse['debug']) {
 
 function clearDebugState() {
   debugPromptLayers.value = ''
-  debugSoulSignals.value = ''
   debugAppliedStrategy.value = ''
   debugSoulContext.value = ''
   debugSoulPinnedContext.value = ''
-  debugSoulObservedContext.value = ''
-  debugSoulObservedProfile.value = ''
-  debugSoulObservedSignalCount.value = 0
   debugSoulEnabled.value = false
   debugSoulConfigured.value = false
   debugSoulCharCount.value = 0
@@ -1240,58 +1130,12 @@ function openOptions() {
                     <pre class="max-h-48 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulPinnedContext || '(empty)' }}</pre>
                   </div>
                   <div>
-                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Merged soul context</div>
+                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Projected soul context</div>
                     <pre class="max-h-48 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulContext || '(empty)' }}</pre>
                   </div>
                   <div>
                     <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Soul budget</div>
                     <pre class="max-h-56 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulBudget || '(empty)' }}</pre>
-                  </div>
-                </div>
-
-                <div v-else-if="section.key === 'observed-soul'" class="grid gap-4 border-t border-neutral-200 p-4">
-                  <div class="grid gap-3 sm:grid-cols-3">
-                    <div class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                      <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Preferences</div>
-                      <div class="mt-1 text-sm text-neutral-900">{{ parsedSoulObservedProfile?.preferences.length ?? 0 }}</div>
-                    </div>
-                    <div class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                      <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Avoidances</div>
-                      <div class="mt-1 text-sm text-neutral-900">{{ parsedSoulObservedProfile?.avoidances.length ?? 0 }}</div>
-                    </div>
-                    <div class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                      <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Terms</div>
-                      <div class="mt-1 text-sm text-neutral-900">{{ parsedSoulObservedProfile?.terms.length ?? 0 }}</div>
-                    </div>
-                  </div>
-                  <div>
-                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Observed soul context</div>
-                    <pre class="max-h-48 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulObservedContext || '(empty)' }}</pre>
-                  </div>
-                  <div>
-                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Observed soul profile</div>
-                    <pre class="max-h-56 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulObservedProfile || '(empty)' }}</pre>
-                  </div>
-                </div>
-
-                <div v-else-if="section.key === 'observed-signals'" class="grid gap-4 border-t border-neutral-200 p-4">
-                  <div class="grid gap-3 sm:grid-cols-3">
-                    <div class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                      <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Observed</div>
-                      <div class="mt-1 text-sm text-neutral-900">{{ debugSoulObservedSignalCount }}</div>
-                    </div>
-                    <div class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                      <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Mature</div>
-                      <div class="mt-1 text-sm text-neutral-900">{{ parsedSoulSignals?.matureCount ?? 0 }}</div>
-                    </div>
-                    <div class="rounded-lg border border-neutral-200 bg-neutral-50 p-3">
-                      <div class="text-[11px] font-semibold uppercase tracking-[0.18em] text-neutral-500">Top signal</div>
-                      <div class="mt-1 text-sm text-neutral-900">{{ parsedSoulSignals?.signals[0] ? `${parsedSoulSignals.signals[0].kind}:${parsedSoulSignals.signals[0].value}` : 'none' }}</div>
-                    </div>
-                  </div>
-                  <div>
-                    <div class="mb-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Soul signals</div>
-                    <pre class="max-h-64 overflow-auto rounded-md bg-neutral-950 p-3 text-xs text-neutral-100">{{ debugSoulSignals || '(empty)' }}</pre>
                   </div>
                 </div>
 

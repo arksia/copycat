@@ -43,37 +43,23 @@ describe('buildSoulContext', () => {
     })).toBe('')
   })
 
-  it('preserves pinned soul text before trimming lower-priority observed cues', () => {
+  it('preserves pinned soul text when the editable text is long', () => {
     const soulContext = buildSoulContext({
       enabled: true,
-      text: '不要套话，不要营销语气。',
-      observed: {
-        preferences: Array.from({ length: 120 }, (_, index) => `观察到的偏好 ${index + 1}：保持内容尽量具体。`),
-        avoidances: [],
-        terms: [],
-      },
+      text: Array.from({ length: 120 }, (_, index) => `固定 Soul ${index + 1}：保持内容尽量具体。`).join('\n'),
     })
 
-    expect(soulContext).toContain('[Pinned Soul]\n不要套话，不要营销语气。')
-    expect(soulContext).toContain('[Observed Preferences]\n')
-    expect(soulContext).not.toContain('观察到的偏好 120：保持内容尽量具体。')
+    expect(soulContext).toContain('[Pinned Soul]\n固定 Soul 1：保持内容尽量具体。')
+    expect(soulContext).not.toContain('固定 Soul 120：保持内容尽量具体。')
   })
 
   it('keeps a stable output order after budget selection', () => {
     const soulContext = buildSoulContext({
       enabled: true,
       text: '资深工程师\n表达直接',
-      observed: {
-        preferences: ['Lead with the answer before adding context.'],
-        avoidances: ['Avoid hype, promotional language, and exaggerated claims.'],
-        terms: ['ghost text'],
-      },
     })
 
-    expect(soulContext.indexOf('[Observed Preferences]')).toBeGreaterThan(soulContext.indexOf('[Pinned Soul]'))
-    expect(soulContext.indexOf('[Observed Avoidances]')).toBeGreaterThan(soulContext.indexOf('[Observed Preferences]'))
-    expect(soulContext.indexOf('[Observed Terms]')).toBeGreaterThan(soulContext.indexOf('[Observed Avoidances]'))
-    expect(soulContext.indexOf('[Application Rules]')).toBeGreaterThan(soulContext.indexOf('[Observed Terms]'))
+    expect(soulContext.indexOf('[Application Rules]')).toBeGreaterThan(soulContext.indexOf('[Pinned Soul]'))
   })
 
   it('always retains application rules when soul content is truncated', () => {
@@ -90,11 +76,6 @@ describe('buildSoulContext', () => {
     const projection = buildSoulProjection({
       enabled: true,
       text: Array.from({ length: 120 }, (_, index) => `固定 Soul ${index + 1}：保持内容尽量具体。`).join('\n'),
-      observed: {
-        preferences: ['Lead with the answer before adding context.'],
-        avoidances: ['Avoid hype, promotional language, and exaggerated claims.'],
-        terms: ['ghost text'],
-      },
     })
 
     expect(projection.meta.totalChars).toBe(1200)
@@ -107,22 +88,6 @@ describe('buildSoulContext', () => {
       label: 'Pinned Soul',
       wasDropped: false,
     })
-  })
-
-  it('includes observed soul blocks after pinned soul text', () => {
-    const context = buildSoulContext({
-      enabled: true,
-      text: '用户主要在做浏览器插件和 AI 输入体验。',
-      observed: {
-        preferences: ['Lead with the answer when it fits naturally.'],
-        avoidances: ['Avoid hype, promotional language, and exaggerated claims.'],
-        terms: ['rag'],
-      },
-    })
-
-    expect(context).toContain('[Observed Preferences]\n- Lead with the answer when it fits naturally.')
-    expect(context).toContain('[Observed Avoidances]\n- Avoid hype, promotional language, and exaggerated claims.')
-    expect(context).toContain('[Observed Terms]\n- rag')
   })
 })
 

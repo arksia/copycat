@@ -17,9 +17,8 @@ import {
   searchKnowledgeChunks,
 } from '~/knowledge'
 import {
-  deriveSoulObservedSignals,
-  getSoulObservedSignalSnapshot,
-  upsertSoulObservedSignal,
+  runSoulLearning,
+  shouldRunSoulLearning,
 } from '~/soul'
 import {
   createBackgroundCompletionService,
@@ -39,7 +38,11 @@ export default defineBackground(() => {
   const knowledgeDocumentTopK = 3
   const semanticQueryCacheTtlMs = 30_000
   const telemetryWindowSize = 20
+  const soulLearningCooldownMs = 5 * 60 * 1000
+  const soulLearningWindowSize = 20
   let creatingOffscreenDocument: Promise<void> | null = null
+  let lastSoulLearningRunAt = 0
+  let runningSoulLearning: Promise<void> | null = null
   const semanticQueryEmbeddingCache = new Map<string, {
     expiresAt: number
     result: {
@@ -110,19 +113,7 @@ export default defineBackground(() => {
         return true
 
       case 'completion/event':
-        void putCompletionEvent(message.payload).catch((error: unknown) => {
-          console.warn('[copycat] failed to persist completion event', error)
-        })
-        void loadSettings()
-          .then(async (settings) => {
-            if (!settings.soul.learningEnabled) {
-              return
-            }
-            await persistSoulObservedSignals(message.payload)
-          })
-          .catch((error: unknown) => {
-            console.warn('[copycat] failed to persist Soul observed signals', error)
-          })
+        void persistCompletionEventAndMaybeLearn(message.payload)
         sendResponse({ ok: true })
         return false
 
@@ -142,22 +133,6 @@ export default defineBackground(() => {
       case 'completion/events/stats':
         void getCompletionEventStats(message.payload.host)
           .then((result: CompletionEventStats) => sendResponse({ ok: true, data: result }))
-          .catch((error: unknown) => {
-            sendResponse({
-              ok: false,
-              error: {
-                error: error instanceof Error ? error.message : String(error),
-              },
-            })
-          })
-        return true
-
-      case 'soul/signals':
-        void getSoulObservedSignalSnapshot({
-          limit: message.payload.limit,
-          matureOnly: message.payload.matureOnly,
-        })
-          .then(result => sendResponse({ ok: true, data: result }))
           .catch((error: unknown) => {
             sendResponse({
               ok: false,
@@ -223,12 +198,65 @@ export default defineBackground(() => {
     return false
   })
 
-  async function persistSoulObservedSignals(event: CompletionEvent): Promise<void> {
-    const tags = deriveSoulObservedSignals({ event })
-
-    for (const tag of tags) {
-      await upsertSoulObservedSignal(tag)
+  async function persistCompletionEventAndMaybeLearn(event: CompletionEvent): Promise<void> {
+    try {
+      await putCompletionEvent(event)
     }
+    catch (error) {
+      console.warn('[copycat] failed to persist completion event', error)
+      return
+    }
+
+    await maybeRunSoulLearning(event).catch((error: unknown) => {
+      console.warn('[copycat] failed to schedule Soul learning', error)
+    })
+  }
+
+  async function maybeRunSoulLearning(event: CompletionEvent): Promise<void> {
+    if (runningSoulLearning !== null) {
+      return
+    }
+
+    const settings = await loadSettings()
+    if (!settings.soul.learningEnabled || !settings.baseUrl || !settings.model) {
+      return
+    }
+
+    const events = await listRecentCompletionEventsByHost(event.host, soulLearningWindowSize)
+    const now = Date.now()
+    if (!shouldRunSoulLearning({
+      cooldownMs: soulLearningCooldownMs,
+      events,
+      lastRunAt: lastSoulLearningRunAt,
+      now,
+    })) {
+      return
+    }
+
+    lastSoulLearningRunAt = now
+    runningSoulLearning = runSoulLearning({
+      currentSoulText: settings.soul.text,
+      events,
+      settings,
+    })
+      .then(async (result) => {
+        if (result?.shouldUpdate !== true) {
+          return
+        }
+        await saveSettings({
+          soul: {
+            text: result.nextSoulText,
+          },
+        })
+      })
+      .catch((error: unknown) => {
+        console.warn('[copycat] failed to run Soul learning', error)
+      })
+      .finally(() => {
+        runningSoulLearning = null
+      })
+
+    await runningSoulLearning
   }
 
   async function handleKnowledgeDelete(args: {

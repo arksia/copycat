@@ -1,10 +1,8 @@
 import type { SoulBlock } from './profile'
 import type {
-  ObservedSoulProfile,
   SoulBudgetMeta,
   SoulProjectionInput,
 } from '~/types'
-import { buildObservedSoulBlocks } from './distill'
 import { buildPinnedSoulBlocks } from './profile'
 
 const BLOCK_SEPARATOR = '\n\n'
@@ -18,7 +16,7 @@ export interface SoulProjection {
 }
 
 /**
- * Projects pinned and observed Soul cues into one structured prompt fragment.
+ * Projects the editable Soul text into one structured prompt fragment.
  *
  * Before:
  * - `{ text: "工程师\n先给结论" }`
@@ -45,10 +43,7 @@ export function buildSoulProjection(input: SoulProjectionInput): SoulProjection 
     return buildEmptySoulProjection()
   }
 
-  const blocks = mergeSoulBlocks(
-    buildPinnedSoulBlocks(input.text),
-    buildObservedSoulBlocks(input.observed ?? buildEmptyObservedSoulProfile()),
-  )
+  const blocks = buildPinnedSoulBlocks(input.text)
   if (blocks.length === 0) {
     return buildEmptySoulProjection()
   }
@@ -114,10 +109,6 @@ function buildApplicationRulesBlock(): SoulBlock {
     outputOrder: 5,
     inclusionPriority: 5,
   }
-}
-
-function mergeSoulBlocks(explicitBlocks: SoulBlock[], observedBlocks: SoulBlock[]): SoulBlock[] {
-  return [...explicitBlocks, ...observedBlocks]
 }
 
 function fitSoulBlocksWithinBudget(blocks: SoulBlock[], budget: number): {
@@ -294,14 +285,6 @@ function buildEmptySoulProjection(): SoulProjection {
       droppedBlocks: [],
       trimmedBlocks: [],
     },
-  }
-}
-
-function buildEmptyObservedSoulProfile(): ObservedSoulProfile {
-  return {
-    preferences: [],
-    avoidances: [],
-    terms: [],
   }
 }
 

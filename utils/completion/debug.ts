@@ -41,11 +41,7 @@ export interface BuildCompletionDebugInfoArgs {
     enabled: boolean
     budget?: CompletionDebugInfo['soulBudget']
     pinnedContext?: CompletionDebugInfo['soulPinnedContext']
-    observedContext?: CompletionDebugInfo['soulObservedContext']
-    observedProfile?: CompletionDebugInfo['soulObservedProfile']
-    observedSignalCount?: CompletionDebugInfo['soulObservedSignalCount']
   }
-  soulSignals?: CompletionDebugInfo['soulSignals']
   telemetry?: {
     host: string
     stats: CompletionEventStats
@@ -87,14 +83,10 @@ export function buildCompletionDebugInfo(
     })),
     soulContext: args.soul?.context ?? debug.soulContext,
     soulPinnedContext: args.soul?.pinnedContext ?? debug.soulPinnedContext,
-    soulObservedContext: args.soul?.observedContext ?? debug.soulObservedContext,
-    soulObservedProfile: args.soul?.observedProfile ?? debug.soulObservedProfile,
-    soulObservedSignalCount: args.soul?.observedSignalCount ?? debug.soulObservedSignalCount,
     soulEnabled: (args.soul?.context ?? debug.soulContext ?? '').length > 0,
     soulConfigured: args.soul?.enabled ?? debug.soulConfigured,
     soulCharCount: (args.soul?.context ?? debug.soulContext ?? '').length,
     soulBudget: args.soul?.budget ?? debug.soulBudget,
-    soulSignals: args.soulSignals ?? debug.soulSignals,
     knowledgeContext: args.knowledgeResolution.context,
     knowledgeBudgetMeta: args.knowledgeResolution.budgetMeta,
     promptLayers: {

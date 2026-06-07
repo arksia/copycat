@@ -3,7 +3,6 @@ import type {
   CompletionRequest,
   CompletionResponse,
   KnowledgeChunkEmbedding,
-  ObservedSoulProfile,
 } from '~/types'
 import {
   mergeCompletionContext,
@@ -12,9 +11,6 @@ import {
 } from '~/knowledge'
 import {
   buildSoulProjection,
-  distillSoulSignals,
-  getSoulObservedSignalSnapshot,
-  listMatureSoulObservedSignals,
 } from '~/soul'
 import { loadSettings } from '~/utils/settings'
 import { getPersistedCompletion, putPersistedCompletion } from '~/utils/storage/repositories/completions'
@@ -85,16 +81,6 @@ export function createBackgroundCompletionService(args: {
       = telemetryHost !== null && telemetryHost.length > 0
         ? await getCompletionEventStats(telemetryHost, args.telemetryWindowSize)
         : null
-    const matureSoulSignals = settings.soul.enabled
-      ? await listMatureSoulObservedSignals(8)
-      : []
-    const distilledSoul = distillSoulSignals(matureSoulSignals)
-    const soulSignals = req.debug && settings.soul.enabled
-      ? await getSoulObservedSignalSnapshot({
-          limit: 8,
-          matureOnly: true,
-        })
-      : undefined
     const telemetryMs = Math.round(performance.now() - telemetryStart)
     const qualitySignal = telemetryStats === null ? undefined : deriveCompletionQualitySignal(telemetryStats)
     const shouldRunEnhancedStage = requestStage === 'fast' && qualitySignal?.shouldBoostKnowledge === true
@@ -122,7 +108,6 @@ export function createBackgroundCompletionService(args: {
     const soulProjection = resolveRuntimeSoulProjection({
       enabled: settings.soul.enabled,
       text: settings.soul.text,
-      observedProfile: distilledSoul.profile,
     })
     const soulContext = soulProjection.context
     const cacheKey = buildCompletionCacheKey({
@@ -252,33 +237,7 @@ export function createBackgroundCompletionService(args: {
               enabled: settings.soul.enabled,
               text: settings.soul.text,
             }).context,
-            observedContext: buildSoulProjection({
-              enabled: settings.soul.enabled,
-              text: '',
-              observed: distilledSoul.profile,
-            }).context,
-            observedProfile: distilledSoul.profile,
-            observedSignalCount: matureSoulSignals.length,
           },
-          soulSignals: soulSignals === undefined
-            ? undefined
-            : {
-                triggered: true,
-                totalCount: soulSignals.totalCount,
-                matureCount: soulSignals.matureCount,
-                signals: soulSignals.signals.map(signal => ({
-                  id: signal.id,
-                  kind: signal.kind,
-                  value: signal.value,
-                  confidence: signal.confidence,
-                  count: signal.count,
-                  acceptedCount: signal.acceptedCount,
-                  rejectedCount: signal.rejectedCount,
-                  ignoredCount: signal.ignoredCount,
-                  distinctContextCount: signal.distinctContextCount,
-                  evidence: signal.evidence,
-                })),
-              },
           telemetry: telemetryStats === null
             ? undefined
             : {
@@ -340,12 +299,10 @@ export function createBackgroundCompletionService(args: {
 function resolveRuntimeSoulProjection(args: {
   enabled: boolean
   text: string
-  observedProfile: ObservedSoulProfile
 }) {
   return buildSoulProjection({
     enabled: args.enabled,
     text: args.text,
-    observed: args.observedProfile,
   })
 }
 

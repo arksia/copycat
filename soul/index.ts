@@ -1,15 +1,8 @@
-export { buildObservedSoulBlocks, distillSoulSignals } from './distill'
+export {
+  buildSoulLearningPrompt,
+  parseSoulLearningResponse,
+  runSoulLearning,
+  shouldRunSoulLearning,
+} from './learning'
 export { buildPinnedSoulBlocks } from './profile'
 export { buildSoulContext, buildSoulProjection } from './prompt'
-export {
-  buildSoulSignalEvidence,
-  deriveSoulObservedSignals,
-} from './signals'
-export {
-  getSoulObservedSignalSnapshot,
-  isSoulObservedSignalMature,
-  listMatureSoulObservedSignals,
-  listSoulObservedSignals,
-  putSoulObservedSignal,
-  upsertSoulObservedSignal,
-} from './storage'
