@@ -83,7 +83,7 @@ export async function loadTelemetrySnapshot(args: {
  *
  * Use when:
  * - callers need a stable heuristic without changing request semantics yet
- * - recent local accept / reject / ignore history should be summarized for debugging
+ * - recent local accept / reject history should be summarized for debugging
  *
  * Expects:
  * - `stats` to describe recent host-local completion outcomes
@@ -121,6 +121,6 @@ export function deriveCompletionQualitySignal(
   return {
     band: 'poor',
     shouldBoostKnowledge: true,
-    reason: 'Recent completions are often rejected or ignored.',
+    reason: 'Recent completions are often being rejected.',
   }
 }

@@ -681,6 +681,7 @@ function handleKeydown(event: KeyboardEvent) {
 
 function emitCompletionEvent(args: {
   action: CompletionEvent['action']
+  actualContinuation?: string
   prefix: string
   suggestion: string
 }) {
@@ -688,6 +689,7 @@ function emitCompletionEvent(args: {
     id: nextId('play-evt'),
     prefix: args.prefix,
     suggestion: args.suggestion,
+    actualContinuation: args.actualContinuation ?? (args.action === 'accepted' ? args.suggestion : ''),
     action: args.action,
     latencyMs: lastLatencyMs.value ?? 0,
     timestamp: Date.now(),
@@ -701,13 +703,6 @@ function emitCompletionEvent(args: {
 }
 
 function clearAll() {
-  if (suggestion.value) {
-    emitCompletionEvent({
-      action: 'ignored',
-      prefix: previewPrefix.value,
-      suggestion: suggestion.value,
-    })
-  }
   draft.value = ''
   suggestion.value = ''
   errorText.value = ''

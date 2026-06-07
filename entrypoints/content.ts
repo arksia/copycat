@@ -262,10 +262,10 @@ class CopycatFlowController {
       return
     }
     if (snapshot.eligible) {
-      const triggerDecision = evaluateCompletionTrigger({
-        prefix: snapshot.prefix,
-        now: Date.now(),
-        memory: this.triggerMemory,
+        const triggerDecision = evaluateCompletionTrigger({
+          prefix: snapshot.prefix,
+          now: Date.now(),
+          memory: this.triggerMemory,
       })
       if (!triggerDecision.allowed) {
         this.logDebug('snapshot-skipped-trigger-policy', {
@@ -275,6 +275,7 @@ class CopycatFlowController {
         const state = this.controller.getState()
         if (state.session) {
           this.controller.dispatch({
+            snapshot,
             sessionId: state.session.sessionId,
             type: 'REQUEST_SUPPRESSED',
           })
@@ -400,6 +401,7 @@ class CopycatFlowController {
           const id = nextId('evt')
           const payload: CompletionEvent = {
             action: effect.action,
+            actualContinuation: effect.actualContinuation,
             host: location.host,
             id,
             latencyMs: effect.latencyMs,

@@ -8,7 +8,6 @@ describe('loadTelemetrySnapshot', () => {
       total: 3,
       accepted: 2,
       rejected: 1,
-      ignored: 0,
       acceptanceRate: 0.67,
       averageLatencyMs: 127,
     }
@@ -17,6 +16,7 @@ describe('loadTelemetrySnapshot', () => {
         id: 'evt-1',
         prefix: '我需要构建一个博客系统',
         suggestion: '，支持评论功能。',
+        actualContinuation: '，支持评论功能。',
         action: 'accepted',
         latencyMs: 120,
         timestamp: 100,

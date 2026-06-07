@@ -1,5 +1,6 @@
 import { shouldPreferEnhancedCompletion } from './staging'
 import type {
+  CompletionSnapshot,
   CompletionEffect,
   CompletionEvent,
   CompletionSession,
@@ -27,6 +28,7 @@ function createSession(args: {
 function buildBlockedTransition(
   state: CompletionState,
   nextState: CompletionState,
+  rejectedSnapshot?: CompletionSnapshot,
 ): CompletionTransition {
   const effects: CompletionEffect[] = []
   if (state.session) {
@@ -43,15 +45,13 @@ function buildBlockedTransition(
       sessionId: state.session.sessionId,
       type: 'CLEAR_SUGGESTION',
     })
-    if (state.session.suggestion) {
-      effects.push({
-        action: 'ignored',
-        latencyMs: state.session.latencyMs ?? 0,
-        prefix: state.snapshot?.prefix ?? '',
-        sessionId: state.session.sessionId,
-        suggestion: state.session.originalSuggestion || state.session.suggestion,
-        type: 'EMIT_EVENT',
-      })
+    const rejectedEffect = buildRejectedEffect({
+      session: state.session,
+      snapshot: state.snapshot,
+      nextSnapshot: rejectedSnapshot,
+    })
+    if (rejectedEffect !== null) {
+      effects.push(rejectedEffect)
     }
   }
   return {
@@ -128,7 +128,7 @@ export function reduceCompletionState(
           mode: 'blocked',
           snapshot: event.snapshot,
           session: null,
-        })
+        }, event.snapshot)
       }
 
       if (
@@ -170,6 +170,14 @@ export function reduceCompletionState(
           sessionId: state.session.sessionId,
           type: 'CLEAR_SUGGESTION',
         })
+        const rejectedEffect = buildRejectedEffect({
+          session: state.session,
+          snapshot: state.snapshot,
+          nextSnapshot: event.snapshot,
+        })
+        if (rejectedEffect !== null) {
+          effects.push(rejectedEffect)
+        }
       }
       effects.push({
         sessionId: nextSession.sessionId,
@@ -344,6 +352,7 @@ export function reduceCompletionState(
       return {
         effects: [{
           action: 'accepted',
+          actualContinuation: state.session.originalSuggestion || state.session.suggestion,
           latencyMs: state.session.latencyMs ?? 0,
           prefix: state.snapshot.prefix,
           sessionId: state.session.sessionId,
@@ -365,6 +374,11 @@ export function reduceCompletionState(
       if (!state.session || state.session.sessionId !== event.sessionId) {
         return { effects: [], state }
       }
+      const rejectedEffect = buildRejectedEffect({
+        session: state.session,
+        snapshot: state.snapshot,
+        nextSnapshot: event.snapshot,
+      })
       return {
         effects: [{
           requestId: state.session.requestId,
@@ -376,24 +390,24 @@ export function reduceCompletionState(
         }, {
           sessionId: state.session.sessionId,
           type: 'CLEAR_SUGGESTION',
-        }],
+        }, ...(rejectedEffect === null ? [] : [rejectedEffect])],
         state: {
           ...state,
+          snapshot: event.snapshot,
           mode: 'idle',
           session: null,
         },
       }
     }
 
-    case 'SUGGESTION_REJECTED':
-    case 'SESSION_CANCELLED': {
+    case 'SUGGESTION_REJECTED': {
       if (!state.session || state.session.sessionId !== event.sessionId || !state.snapshot) {
         return { effects: [], state }
       }
-      const action = event.type === 'SUGGESTION_REJECTED' ? 'rejected' : 'ignored'
       return {
         effects: [{
-          action,
+          action: 'rejected',
+          actualContinuation: '',
           latencyMs: state.session.latencyMs ?? 0,
           prefix: state.snapshot.prefix,
           sessionId: state.session.sessionId,
@@ -410,5 +424,68 @@ export function reduceCompletionState(
         },
       }
     }
+
+    case 'SESSION_CANCELLED': {
+      if (!state.session || state.session.sessionId !== event.sessionId) {
+        return { effects: [], state }
+      }
+      return {
+        effects: [{
+          sessionId: state.session.sessionId,
+          type: 'CLEAR_SUGGESTION',
+        }],
+        state: {
+          ...state,
+          mode: 'idle',
+          session: null,
+        },
+      }
+    }
   }
+}
+
+function buildRejectedEffect(args: {
+  session: CompletionSession
+  snapshot: CompletionSnapshot | null
+  nextSnapshot?: CompletionSnapshot
+}): CompletionEffect | null {
+  const suggestion = args.session.originalSuggestion || args.session.suggestion
+  if (!args.snapshot || suggestion.length === 0 || args.nextSnapshot === undefined) {
+    return null
+  }
+
+  if (args.nextSnapshot.value === args.snapshot.value) {
+    return null
+  }
+
+  const actualContinuation = deriveActualContinuation({
+    nextValue: args.nextSnapshot.value,
+    prefix: args.snapshot.prefix,
+    suggestion,
+  })
+  if (actualContinuation.length === 0) {
+    return null
+  }
+
+  return {
+    action: 'rejected',
+    actualContinuation,
+    latencyMs: args.session.latencyMs ?? 0,
+    prefix: args.snapshot.prefix,
+    sessionId: args.session.sessionId,
+    suggestion,
+    type: 'EMIT_EVENT',
+  }
+}
+
+function deriveActualContinuation(args: {
+  nextValue: string
+  prefix: string
+  suggestion: string
+}): string {
+  if (!args.nextValue.startsWith(args.prefix)) {
+    return ''
+  }
+
+  return args.nextValue.slice(args.prefix.length, args.prefix.length + args.suggestion.length)
 }

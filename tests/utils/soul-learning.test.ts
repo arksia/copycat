@@ -11,6 +11,7 @@ function buildEvent(overrides: Partial<CompletionEvent> = {}): CompletionEvent {
     id: overrides.id ?? 'evt-1',
     prefix: overrides.prefix ?? '请直接给一个工程实现建议',
     suggestion: overrides.suggestion ?? '先给结论，再列出取舍。',
+    actualContinuation: overrides.actualContinuation ?? (overrides.suggestion ?? '先给结论，再列出取舍。'),
     action: overrides.action ?? 'accepted',
     latencyMs: overrides.latencyMs ?? 120,
     timestamp: overrides.timestamp ?? 100,
@@ -19,15 +20,13 @@ function buildEvent(overrides: Partial<CompletionEvent> = {}): CompletionEvent {
 }
 
 describe('shouldRunSoulLearning', () => {
-  it('waits for enough events and actionable feedback outside the cooldown window', () => {
-    const events = [
-      buildEvent({ id: 'evt-1', action: 'accepted' }),
-      buildEvent({ id: 'evt-2', action: 'accepted' }),
-      buildEvent({ id: 'evt-3', action: 'rejected' }),
-      buildEvent({ id: 'evt-4', action: 'ignored' }),
-      buildEvent({ id: 'evt-5', action: 'ignored' }),
-      buildEvent({ id: 'evt-6', action: 'ignored' }),
-    ]
+  it('waits for enough fresh events outside the cooldown window', () => {
+    const events = Array.from({ length: 12 }, (_, index) => buildEvent({
+      id: `evt-${index + 1}`,
+      action: index % 3 === 0 ? 'rejected' : 'accepted',
+      actualContinuation: index % 3 === 0 ? '换一种更直接的说法。' : '先给结论，再列出取舍。',
+      timestamp: 100 + index,
+    }))
 
     expect(shouldRunSoulLearning({
       cooldownMs: 100,
@@ -37,10 +36,12 @@ describe('shouldRunSoulLearning', () => {
     })).toBe(true)
   })
 
-  it('does not run during cooldown or without enough actionable feedback', () => {
-    const events = Array.from({ length: 6 }, (_, index) => buildEvent({
-      id: `evt-${index}`,
-      action: index === 0 ? 'accepted' : 'ignored',
+  it('does not run during cooldown or without enough fresh events', () => {
+    const events = Array.from({ length: 11 }, (_, index) => buildEvent({
+      id: `evt-${index + 1}`,
+      action: index % 2 === 0 ? 'accepted' : 'rejected',
+      actualContinuation: index % 2 === 0 ? '先给结论，再列出取舍。' : '先说风险，再给建议。',
+      timestamp: 100 + index,
     }))
 
     expect(shouldRunSoulLearning({
@@ -56,6 +57,19 @@ describe('shouldRunSoulLearning', () => {
       lastRunAt: 0,
       now: 200,
     })).toBe(false)
+
+    expect(shouldRunSoulLearning({
+      cooldownMs: 100,
+      events: [
+        ...events,
+        buildEvent({
+          id: 'evt-12',
+          timestamp: 100,
+        }),
+      ],
+      lastRunAt: 100,
+      now: 250,
+    })).toBe(false)
   })
 })
 
@@ -68,13 +82,24 @@ describe('buildSoulLearningPrompt', () => {
           action: 'accepted',
           prefix: '帮我写一个方案',
           suggestion: '先给结论，再说明原因。',
+          actualContinuation: '先给结论，再说明原因。',
+        }),
+        buildEvent({
+          action: 'rejected',
+          prefix: '帮我写一个方案',
+          suggestion: '补一个长背景段落。',
+          actualContinuation: '直接列实现步骤。',
         }),
       ],
     })
 
     expect(prompt).toContain('[Current Soul Text]\n保持直接，先给结论。')
+    expect(prompt).toContain('[Recent Accepted Events]')
+    expect(prompt).toContain('[Recent Rejected Events]')
     expect(prompt).toContain('"action":"accepted"')
+    expect(prompt).toContain('"action":"rejected"')
     expect(prompt).toContain('"prefix":"帮我写一个方案"')
+    expect(prompt).toContain('"actualContinuation":"直接列实现步骤。"')
     expect(prompt).toContain('"nextSoulText"')
   })
 })

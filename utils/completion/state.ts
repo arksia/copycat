@@ -97,6 +97,7 @@ export type CompletionEvent
       type: 'SESSION_CANCELLED'
     }
     | {
+      snapshot: CompletionSnapshot
       sessionId: string
       type: 'REQUEST_SUPPRESSED'
     }
@@ -118,7 +119,8 @@ export type CompletionEffect
     | {
       sessionId: string
       type: 'EMIT_EVENT'
-      action: 'accepted' | 'ignored' | 'rejected'
+      action: 'accepted' | 'rejected'
+      actualContinuation: string
       latencyMs: number
       prefix: string
       suggestion: string

@@ -734,10 +734,6 @@ async function runKnowledgeSearch() {
               <div class="mt-1 text-lg font-semibold text-rose-600">{{ telemetryStats.rejected }}</div>
             </div>
             <div class="rounded-lg border border-neutral-200 px-3 py-2">
-              <div class="text-xs text-neutral-500">Ignored</div>
-              <div class="mt-1 text-lg font-semibold">{{ telemetryStats.ignored }}</div>
-            </div>
-            <div class="rounded-lg border border-neutral-200 px-3 py-2">
               <div class="text-xs text-neutral-500">Acceptance rate</div>
               <div class="mt-1 text-lg font-semibold">{{ Math.round(telemetryStats.acceptanceRate * 100) }}%</div>
             </div>
@@ -759,7 +755,6 @@ async function runKnowledgeSearch() {
                   :class="{
                     'bg-emerald-50 text-emerald-700': event.action === 'accepted',
                     'bg-rose-50 text-rose-700': event.action === 'rejected',
-                    'bg-neutral-100 text-neutral-700': event.action === 'ignored',
                   }"
                 >
                   {{ event.action }}
@@ -778,6 +773,12 @@ async function runKnowledgeSearch() {
                   <div class="mb-1 text-xs text-neutral-500">Suggestion</div>
                   <p class="whitespace-pre-wrap rounded bg-neutral-50 px-2 py-1 font-mono text-xs text-neutral-700">
                     {{ event.suggestion }}
+                  </p>
+                </div>
+                <div v-if="event.actualContinuation">
+                  <div class="mb-1 text-xs text-neutral-500">Actual continuation</div>
+                  <p class="whitespace-pre-wrap rounded bg-neutral-50 px-2 py-1 font-mono text-xs text-neutral-700">
+                    {{ event.actualContinuation }}
                   </p>
                 </div>
               </div>

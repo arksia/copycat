@@ -27,19 +27,22 @@ import { openSettingsPage } from '~/utils/runtime'
 import { loadSettings, saveSettings } from '~/utils/settings'
 import {
   getCompletionEventStats,
+  listRecentCompletionEvents,
   listRecentCompletionEventsByHost,
   putCompletionEvent,
 } from '~/utils/storage/repositories/events'
 
 export default defineBackground(() => {
+  const soulLearningAlarmName = 'copycat:soul-learning'
   const defaultKnowledgeBaseId = 'default'
   const knowledgeContextMaxChars = 900
   const knowledgeTopK = 2
   const knowledgeDocumentTopK = 3
   const semanticQueryCacheTtlMs = 30_000
   const telemetryWindowSize = 20
-  const soulLearningCooldownMs = 5 * 60 * 1000
-  const soulLearningWindowSize = 20
+  const soulLearningIdleDelayMinutes = 3
+  const soulLearningCooldownMs = 30 * 60 * 1000
+  const soulLearningWindowSize = 24
   let creatingOffscreenDocument: Promise<void> | null = null
   let lastSoulLearningRunAt = 0
   let runningSoulLearning: Promise<void> | null = null
@@ -65,6 +68,15 @@ export default defineBackground(() => {
     if (details.reason === 'install') {
       void openSettingsPage()
     }
+  })
+
+  chrome.alarms.onAlarm.addListener((alarm) => {
+    if (alarm.name !== soulLearningAlarmName) {
+      return
+    }
+    void maybeRunSoulLearning().catch((error: unknown) => {
+      console.warn('[copycat] failed to run scheduled Soul learning', error)
+    })
   })
 
   chrome.runtime.onMessage.addListener((message: RuntimeMessage, _sender, sendResponse) => {
@@ -207,12 +219,23 @@ export default defineBackground(() => {
       return
     }
 
-    await maybeRunSoulLearning(event).catch((error: unknown) => {
+    await scheduleSoulLearning().catch((error: unknown) => {
       console.warn('[copycat] failed to schedule Soul learning', error)
     })
   }
 
-  async function maybeRunSoulLearning(event: CompletionEvent): Promise<void> {
+  async function scheduleSoulLearning(): Promise<void> {
+    const settings = await loadSettings()
+    if (!settings.soul.learningEnabled || !settings.baseUrl || !settings.model) {
+      return
+    }
+
+    await chrome.alarms.create(soulLearningAlarmName, {
+      delayInMinutes: soulLearningIdleDelayMinutes,
+    })
+  }
+
+  async function maybeRunSoulLearning(): Promise<void> {
     if (runningSoulLearning !== null) {
       return
     }
@@ -222,7 +245,7 @@ export default defineBackground(() => {
       return
     }
 
-    const events = await listRecentCompletionEventsByHost(event.host, soulLearningWindowSize)
+    const events = await listRecentCompletionEvents(soulLearningWindowSize)
     const now = Date.now()
     if (!shouldRunSoulLearning({
       cooldownMs: soulLearningCooldownMs,

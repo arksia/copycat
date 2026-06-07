@@ -92,14 +92,6 @@ describe('reduceCompletionState', () => {
         sessionId: 'sess_1',
         type: 'CLEAR_SUGGESTION',
       },
-      {
-        action: 'ignored',
-        latencyMs: 120,
-        prefix: 'hello',
-        sessionId: 'sess_1',
-        suggestion: ' world',
-        type: 'EMIT_EVENT',
-      },
     ])
   })
 
@@ -196,14 +188,6 @@ describe('reduceCompletionState', () => {
         sessionId: 'sess_1',
         type: 'CLEAR_SUGGESTION',
       },
-      {
-        action: 'ignored',
-        latencyMs: 120,
-        prefix: 'hello',
-        sessionId: 'sess_1',
-        suggestion: ' world',
-        type: 'EMIT_EVENT',
-      },
     ])
   })
 
@@ -245,14 +229,6 @@ describe('reduceCompletionState', () => {
         sessionId: 'sess_1',
         type: 'CLEAR_SUGGESTION',
       },
-      {
-        action: 'ignored',
-        latencyMs: 120,
-        prefix: 'hello',
-        sessionId: 'sess_1',
-        suggestion: ' world',
-        type: 'EMIT_EVENT',
-      },
     ])
   })
 
@@ -273,6 +249,7 @@ describe('reduceCompletionState', () => {
     })
 
     const result = reduceCompletionState(state, {
+      snapshot: buildSnapshot(),
       sessionId: 'sess_1',
       type: 'REQUEST_SUPPRESSED',
     })
@@ -313,6 +290,11 @@ describe('reduceCompletionState', () => {
     })
 
     const result = reduceCompletionState(state, {
+      snapshot: buildSnapshot({
+        prefix: 'hello',
+        revision: 2,
+        value: 'hello there',
+      }),
       sessionId: 'sess_1',
       type: 'REQUEST_SUPPRESSED',
     })
@@ -332,6 +314,15 @@ describe('reduceCompletionState', () => {
       {
         sessionId: 'sess_1',
         type: 'CLEAR_SUGGESTION',
+      },
+      {
+        action: 'rejected',
+        actualContinuation: ' there',
+        latencyMs: 120,
+        prefix: 'hello',
+        sessionId: 'sess_1',
+        suggestion: ' world',
+        type: 'EMIT_EVENT',
       },
     ])
   })

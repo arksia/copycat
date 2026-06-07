@@ -224,7 +224,8 @@ export interface CompletionEvent {
   id: string
   prefix: string
   suggestion: string
-  action: 'accepted' | 'rejected' | 'ignored'
+  actualContinuation: string
+  action: 'accepted' | 'rejected'
   latencyMs: number
   timestamp: number
   host: string
@@ -234,7 +235,6 @@ export interface CompletionEventStats {
   total: number
   accepted: number
   rejected: number
-  ignored: number
   acceptanceRate: number
   averageLatencyMs: number
 }

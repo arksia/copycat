@@ -7,7 +7,6 @@ function buildStats(partial: Partial<CompletionEventStats>): CompletionEventStat
     total: 0,
     accepted: 0,
     rejected: 0,
-    ignored: 0,
     acceptanceRate: 0,
     averageLatencyMs: 0,
     ...partial,
@@ -31,8 +30,7 @@ describe('deriveCompletionQualitySignal', () => {
     expect(deriveCompletionQualitySignal(buildStats({
       total: 10,
       accepted: 7,
-      rejected: 1,
-      ignored: 2,
+      rejected: 3,
       acceptanceRate: 0.7,
       averageLatencyMs: 120,
     }))).toEqual({
@@ -46,8 +44,7 @@ describe('deriveCompletionQualitySignal', () => {
     expect(deriveCompletionQualitySignal(buildStats({
       total: 10,
       accepted: 4,
-      rejected: 3,
-      ignored: 3,
+      rejected: 6,
       acceptanceRate: 0.4,
     }))).toEqual({
       band: 'mixed',
@@ -60,13 +57,12 @@ describe('deriveCompletionQualitySignal', () => {
     expect(deriveCompletionQualitySignal(buildStats({
       total: 12,
       accepted: 2,
-      rejected: 6,
-      ignored: 4,
+      rejected: 10,
       acceptanceRate: 0.17,
     }))).toEqual({
       band: 'poor',
       shouldBoostKnowledge: true,
-      reason: 'Recent completions are often rejected or ignored.',
+      reason: 'Recent completions are often being rejected.',
     })
   })
 })

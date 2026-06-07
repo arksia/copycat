@@ -18,7 +18,6 @@ describe('buildCompletionDebugInfo', () => {
       total: 12,
       accepted: 7,
       rejected: 3,
-      ignored: 2,
       acceptanceRate: 0.58,
       averageLatencyMs: 143,
     }

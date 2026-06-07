@@ -6,7 +6,7 @@ import { DB_INDEXES, DB_STORES } from '../schema'
  * Writes one completion event into the local telemetry store.
  *
  * Use when:
- * - accept / reject / ignore actions should feed later Soul or telemetry work
+ * - accept / reject actions should feed later Soul or telemetry work
  * - event logging must stay local and structured
  *
  * Expects:
@@ -48,13 +48,45 @@ export async function listRecentCompletionEventsByHost(
 
   const maxTimestamp = Number.MAX_SAFE_INTEGER
   const range = IDBKeyRange.bound([host, 0], [host, maxTimestamp])
-  const events = await collectCursorValues<CompletionEvent>(
+  const events = await collectCursorValues<unknown>(
     index.openCursor(range, 'prev'),
     limit,
   )
 
   await transactionToPromise(transaction)
-  return events
+  return normalizeCompletionEvents(events)
+}
+
+/**
+ * Lists recent completion events across every host, newest first.
+ *
+ * Use when:
+ * - Soul learning needs a global behavior window
+ * - callers want recent local writing behavior without host partitioning
+ *
+ * Expects:
+ * - `limit` to be a small positive integer
+ *
+ * Returns:
+ * - the newest events across all hosts, up to `limit`
+ */
+export async function listRecentCompletionEvents(
+  limit = 20,
+): Promise<CompletionEvent[]> {
+  const db = await openCopycatDb()
+  const transaction = db.transaction(DB_STORES.completionEvents, 'readonly')
+  const index = transaction
+    .objectStore(DB_STORES.completionEvents)
+    .index(DB_INDEXES.completionEventsByTimestamp)
+
+  const range = IDBKeyRange.bound(0, Number.MAX_SAFE_INTEGER)
+  const events = await collectCursorValues<unknown>(
+    index.openCursor(range, 'prev'),
+    limit,
+  )
+
+  await transactionToPromise(transaction)
+  return normalizeCompletionEvents(events)
 }
 
 /**
@@ -80,7 +112,6 @@ export async function getCompletionEventStats(
       total: 0,
       accepted: 0,
       rejected: 0,
-      ignored: 0,
       acceptanceRate: 0,
       averageLatencyMs: 0,
     }
@@ -88,7 +119,6 @@ export async function getCompletionEventStats(
 
   let accepted = 0
   let rejected = 0
-  let ignored = 0
   let totalLatency = 0
 
   for (const event of events) {
@@ -102,14 +132,12 @@ export async function getCompletionEventStats(
       rejected += 1
       continue
     }
-    ignored += 1
   }
 
   return {
     total: events.length,
     accepted,
     rejected,
-    ignored,
     acceptanceRate: Number((accepted / events.length).toFixed(2)),
     averageLatencyMs: Math.round(totalLatency / events.length),
   }
@@ -135,4 +163,42 @@ async function collectCursorValues<T>(
 
     request.onerror = () => reject(request.error ?? new Error('Failed to iterate IndexedDB cursor'))
   })
+}
+
+function normalizeCompletionEvents(values: unknown[]): CompletionEvent[] {
+  return values
+    .map(normalizeCompletionEvent)
+    .filter((event): event is CompletionEvent => event !== null)
+}
+
+function normalizeCompletionEvent(value: unknown): CompletionEvent | null {
+  if (typeof value !== 'object' || value === null) {
+    return null
+  }
+
+  const raw = value as Partial<Record<keyof CompletionEvent, unknown>>
+  if (raw.action !== 'accepted' && raw.action !== 'rejected') {
+    return null
+  }
+  if (
+    typeof raw.id !== 'string'
+    || typeof raw.prefix !== 'string'
+    || typeof raw.suggestion !== 'string'
+    || typeof raw.host !== 'string'
+    || typeof raw.latencyMs !== 'number'
+    || typeof raw.timestamp !== 'number'
+  ) {
+    return null
+  }
+
+  return {
+    id: raw.id,
+    prefix: raw.prefix,
+    suggestion: raw.suggestion,
+    actualContinuation: typeof raw.actualContinuation === 'string' ? raw.actualContinuation : '',
+    action: raw.action,
+    latencyMs: raw.latencyMs,
+    timestamp: raw.timestamp,
+    host: raw.host,
+  }
 }

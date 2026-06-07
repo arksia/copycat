@@ -6,17 +6,16 @@ import {
   joinOpenAICompatibleUrl,
 } from '~/utils/providers/openai-compatible'
 
-const SOUL_LEARNING_MIN_EVENTS = 6
-const SOUL_LEARNING_MIN_ACTIONABLE_EVENTS = 3
-const SOUL_LEARNING_MAX_EVENTS = 20
+const SOUL_LEARNING_MIN_EVENTS = 12
+const SOUL_LEARNING_MAX_EVENTS = 24
 const SOUL_LEARNING_MAX_TEXT_CHARS = 1600
 
-const SOUL_LEARNING_SYSTEM_PROMPT = `You update Copycat's Soul text from local autocomplete behavior.
+const SOUL_LEARNING_SYSTEM_PROMPT = `You maintain Copycat's Soul text from accepted and rejected autocomplete events.
 Return JSON only.
-The Soul is a concise durable writing profile for future inline autocomplete.
+The Soul text is the complete writing profile used directly in future inline autocomplete prompts.
 Do not invent facts.
-Only make conservative edits supported by repeated accepted or rejected behavior.
-Preserve user-written constraints unless evidence strongly suggests a small wording improvement.`
+Only make conservative edits supported by repeated behavior.
+Preserve strong user-written constraints unless repeated evidence clearly supports a small change.`
 
 export interface SoulLearningDecisionInput {
   events: CompletionEvent[]
@@ -46,15 +45,8 @@ export function shouldRunSoulLearning(input: SoulLearningDecisionInput): boolean
     return false
   }
 
-  if (input.events.length < SOUL_LEARNING_MIN_EVENTS) {
-    return false
-  }
-
-  const actionableCount = input.events
-    .filter(event => event.action === 'accepted' || event.action === 'rejected')
-    .length
-
-  return actionableCount >= SOUL_LEARNING_MIN_ACTIONABLE_EVENTS
+  const freshEvents = input.events.filter(event => event.timestamp > input.lastRunAt)
+  return freshEvents.length >= SOUL_LEARNING_MIN_EVENTS
 }
 
 /**
@@ -66,6 +58,13 @@ export function buildSoulLearningPrompt(args: {
 }): string {
   const events = args.events
     .slice(0, SOUL_LEARNING_MAX_EVENTS)
+    .reverse()
+  const acceptedEvents = events
+    .filter(event => event.action === 'accepted')
+    .map(formatSoulLearningEvent)
+    .join('\n')
+  const rejectedEvents = events
+    .filter(event => event.action === 'rejected')
     .map(formatSoulLearningEvent)
     .join('\n')
   const currentSoulText = args.currentSoulText.trim() || '(empty)'
@@ -74,13 +73,22 @@ export function buildSoulLearningPrompt(args: {
     '[Current Soul Text]',
     currentSoulText,
     '',
-    '[Recent Autocomplete Events]',
-    events || '(none)',
+    '[Recent Accepted Events]',
+    acceptedEvents || '(none)',
+    '',
+    '[Recent Rejected Events]',
+    rejectedEvents || '(none)',
     '',
     '[Task]',
     'Decide whether the Soul text should be updated.',
-    'Focus on stable writing preferences, avoided styles, recurring structure choices, and durable terminology.',
-    'Ignore one-off task content and local document topics.',
+    'Write the full next Soul text, not a patch, notes, or explanation.',
+    'Keep it short and durable.',
+    'Capture stable writing preferences, structure habits, and recurring terminology.',
+    'Ignore temporary tasks, recent topics, event descriptions, and one-off context.',
+    'Do not write meta commentary such as "the user prefers" or "based on recent events".',
+    'Write the Soul text itself as plain guidance using short standalone lines.',
+    'Keep as much of the current Soul text as possible and prefer small edits over rewrites.',
+    'If evidence is weak or mixed, do not update the Soul text.',
     '',
     '[Output JSON]',
     '{',
@@ -167,10 +175,9 @@ export function parseSoulLearningResponse(
 function formatSoulLearningEvent(event: CompletionEvent): string {
   return JSON.stringify({
     action: event.action,
-    host: event.host,
     prefix: truncateForPrompt(event.prefix),
     suggestion: truncateForPrompt(event.suggestion),
-    timestamp: event.timestamp,
+    actualContinuation: truncateForPrompt(event.actualContinuation),
   })
 }
 

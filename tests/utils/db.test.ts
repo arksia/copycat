@@ -14,9 +14,11 @@ import {
 } from '~/utils/storage/repositories/completions'
 import {
   getCompletionEventStats,
+  listRecentCompletionEvents,
   listRecentCompletionEventsByHost,
   putCompletionEvent,
 } from '~/utils/storage/repositories/events'
+import { DB_STORES } from '~/utils/storage/schema'
 import { DB_NAME, DB_VERSION } from '~/utils/storage/schema'
 
 afterEach(async () => {
@@ -37,6 +39,7 @@ describe('indexeddb repositories', () => {
       id: 'evt-1',
       prefix: '我需要构建一个博客系统',
       suggestion: '，并且支持评论和标签。',
+      actualContinuation: '，并且支持评论和标签。',
       action: 'accepted',
       latencyMs: 120,
       timestamp: 100,
@@ -45,8 +48,9 @@ describe('indexeddb repositories', () => {
     const newerEvent: CompletionEvent = {
       id: 'evt-2',
       prefix: '我需要构建一个博客系统',
-      suggestion: '，并支持管理后台。',
-      action: 'ignored',
+      suggestion: '，并支持 RSS 订阅。',
+      actualContinuation: '，改成 RSS 邮件订阅。',
+      action: 'rejected',
       latencyMs: 140,
       timestamp: 200,
       host: 'chatgpt.com',
@@ -55,6 +59,7 @@ describe('indexeddb repositories', () => {
       id: 'evt-3',
       prefix: 'hello',
       suggestion: ' world',
+      actualContinuation: ' there',
       action: 'rejected',
       latencyMs: 80,
       timestamp: 300,
@@ -76,6 +81,7 @@ describe('indexeddb repositories', () => {
         id: 'evt-1',
         prefix: '我需要构建一个博客系统',
         suggestion: '，支持评论功能。',
+        actualContinuation: '，支持评论功能。',
         action: 'accepted',
         latencyMs: 120,
         timestamp: 100,
@@ -85,6 +91,7 @@ describe('indexeddb repositories', () => {
         id: 'evt-2',
         prefix: '我需要构建一个博客系统',
         suggestion: '，支持标签管理。',
+        actualContinuation: '，支持标签管理。',
         action: 'accepted',
         latencyMs: 180,
         timestamp: 200,
@@ -94,6 +101,7 @@ describe('indexeddb repositories', () => {
         id: 'evt-3',
         prefix: '我需要构建一个博客系统',
         suggestion: '，支持 RSS 订阅。',
+        actualContinuation: '，改成邮件订阅。',
         action: 'rejected',
         latencyMs: 80,
         timestamp: 300,
@@ -103,7 +111,8 @@ describe('indexeddb repositories', () => {
         id: 'evt-4',
         prefix: 'hello',
         suggestion: ' world',
-        action: 'ignored',
+        actualContinuation: ' there',
+        action: 'rejected',
         latencyMs: 60,
         timestamp: 400,
         host: 'claude.ai',
@@ -118,7 +127,6 @@ describe('indexeddb repositories', () => {
       total: 3,
       accepted: 2,
       rejected: 1,
-      ignored: 0,
       acceptanceRate: 0.67,
       averageLatencyMs: 127,
     })
@@ -130,6 +138,7 @@ describe('indexeddb repositories', () => {
         id: 'evt-1',
         prefix: 'old accepted',
         suggestion: ' old accepted',
+        actualContinuation: ' old accepted',
         action: 'accepted',
         latencyMs: 100,
         timestamp: 100,
@@ -139,6 +148,7 @@ describe('indexeddb repositories', () => {
         id: 'evt-2',
         prefix: 'new rejected',
         suggestion: ' new rejected',
+        actualContinuation: ' new actual',
         action: 'rejected',
         latencyMs: 200,
         timestamp: 200,
@@ -146,9 +156,10 @@ describe('indexeddb repositories', () => {
       },
       {
         id: 'evt-3',
-        prefix: 'new ignored',
-        suggestion: ' new ignored',
-        action: 'ignored',
+        prefix: 'new accepted',
+        suggestion: ' new accepted',
+        actualContinuation: ' new accepted',
+        action: 'accepted',
         latencyMs: 300,
         timestamp: 300,
         host: 'chatgpt.com',
@@ -161,12 +172,55 @@ describe('indexeddb repositories', () => {
 
     expect(await getCompletionEventStats('chatgpt.com', 2)).toEqual({
       total: 2,
-      accepted: 0,
+      accepted: 1,
       rejected: 1,
-      ignored: 1,
-      acceptanceRate: 0,
+      acceptanceRate: 0.5,
       averageLatencyMs: 250,
     })
+  })
+
+  it('normalizes legacy completion events when reading recent telemetry', async () => {
+    const db = await openCopycatDb()
+    const transaction = db.transaction(DB_STORES.completionEvents, 'readwrite')
+    const store = transaction.objectStore(DB_STORES.completionEvents)
+
+    store.put({
+      id: 'evt-legacy-accepted',
+      prefix: 'legacy accepted',
+      suggestion: ' suggestion',
+      action: 'accepted',
+      latencyMs: 90,
+      timestamp: 100,
+      host: 'chatgpt.com',
+    })
+    store.put({
+      id: 'evt-legacy-ignored',
+      prefix: 'legacy ignored',
+      suggestion: ' suggestion',
+      action: 'ignored',
+      latencyMs: 110,
+      timestamp: 200,
+      host: 'chatgpt.com',
+    })
+
+    await new Promise<void>((resolve, reject) => {
+      transaction.oncomplete = () => resolve()
+      transaction.onerror = () => reject(transaction.error ?? new Error('Failed to seed legacy completion events'))
+      transaction.onabort = () => reject(transaction.error ?? new Error('Failed to seed legacy completion events'))
+    })
+
+    expect(await listRecentCompletionEvents(5)).toEqual([
+      {
+        id: 'evt-legacy-accepted',
+        prefix: 'legacy accepted',
+        suggestion: ' suggestion',
+        actualContinuation: '',
+        action: 'accepted',
+        latencyMs: 90,
+        timestamp: 100,
+        host: 'chatgpt.com',
+      },
+    ])
   })
 
   it('returns persisted completions while fresh and evicts them after expiry', async () => {
