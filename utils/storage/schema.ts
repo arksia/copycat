@@ -43,6 +43,7 @@ export const DB_STORES = {
   completionEvents: 'completion-events',
   knowledgeChunks: 'knowledge-chunks',
   knowledgeDocuments: 'knowledge-documents',
+  soulExportHandles: 'soul-export-handles',
 } as const
 
 /**
@@ -85,6 +86,11 @@ export interface PersistedCompletionCacheEntry {
   updatedAt: number
 }
 
+export interface PersistedSoulExportHandleEntry {
+  handle: FileSystemDirectoryHandle
+  id: string
+}
+
 /**
  * IndexedDB schema shape used by Copycat repositories.
  *
@@ -100,4 +106,5 @@ export interface CopycatDatabaseSchema {
   completionEvents: CompletionEvent
   knowledgeChunks: KnowledgeChunk
   knowledgeDocuments: KnowledgeDocument
+  soulExportHandles: PersistedSoulExportHandleEntry
 }

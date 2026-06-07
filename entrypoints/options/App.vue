@@ -10,6 +10,7 @@ import type {
   KnowledgeSearchRequest,
   ProviderId,
   Settings,
+  SoulExportSyncResult,
 } from '~/types'
 import type { DiscoveredModel } from '~/utils/providers/openai-compatible'
 import { computed, onMounted, ref, watch } from 'vue'
@@ -25,6 +26,10 @@ import {
   parseModelListResponse,
 } from '~/utils/providers/openai-compatible'
 import { sendRuntimeMessage } from '~/utils/runtime'
+import {
+  clearSoulExportDirectoryHandle,
+  putSoulExportDirectoryHandle,
+} from '~/utils/storage/repositories/soul-export'
 import {
   buildDefaultSettings,
   DEFAULT_SETTINGS,
@@ -342,6 +347,74 @@ async function runKnowledgeSearch() {
     searchingKnowledge.value = false
   }
 }
+
+async function chooseSoulExportDirectory() {
+  try {
+    const handle = await window.showDirectoryPicker({
+      mode: 'readwrite',
+    })
+    const permission = await handle.requestPermission({ mode: 'readwrite' })
+    if (permission !== 'granted') {
+      showToast('err', 'Directory write permission was not granted')
+      return
+    }
+
+    await putSoulExportDirectoryHandle(handle)
+    const next = await saveSettings({
+      soul: {
+        exportDirectoryConfigured: true,
+      },
+    })
+    settings.value = next
+    await syncSoulExportNow()
+  }
+  catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      return
+    }
+    showToast('err', error instanceof Error ? error.message : String(error))
+  }
+}
+
+async function clearSoulExportDirectory() {
+  try {
+    await clearSoulExportDirectoryHandle()
+    const next = await saveSettings({
+      soul: {
+        exportDirectoryConfigured: false,
+      },
+    })
+    settings.value = next
+    showToast('ok', 'Cleared Soul export directory')
+  }
+  catch (error) {
+    showToast('err', error instanceof Error ? error.message : String(error))
+  }
+}
+
+async function syncSoulExportNow() {
+  try {
+    const result = await sendRuntimeMessage<SoulExportSyncResult>({
+      type: 'soul/export/sync',
+    })
+    if (!result.exportDirectoryConfigured) {
+      showToast('err', 'No Soul export directory configured')
+      return
+    }
+    if (!result.permissionGranted) {
+      showToast('err', 'Soul export directory permission is no longer granted')
+      return
+    }
+    if (result.wroteSoul) {
+      showToast('ok', 'Synced soul.md')
+      return
+    }
+    showToast('ok', 'Soul export is configured')
+  }
+  catch (error) {
+    showToast('err', error instanceof Error ? error.message : String(error))
+  }
+}
 </script>
 
 <template>
@@ -589,6 +662,34 @@ async function runKnowledgeSearch() {
               </span>
             </span>
           </label>
+        </div>
+
+        <div class="mt-4 rounded-xl border border-neutral-200 p-4">
+          <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div class="text-sm font-medium text-neutral-800">Local Soul files</div>
+              <p class="mt-1 text-xs text-neutral-500">
+                Export the current Soul to <code>soul.md</code> and Soul learning logs to <code>soul-log.jsonl</code>.
+              </p>
+            </div>
+            <div class="flex flex-wrap gap-2">
+              <button class="btn-ghost" @click="chooseSoulExportDirectory">
+                {{ settings.soul.exportDirectoryConfigured ? 'Change directory' : 'Choose directory' }}
+              </button>
+              <button class="btn-ghost" :disabled="!settings.soul.exportDirectoryConfigured" @click="syncSoulExportNow">
+                Sync now
+              </button>
+              <button class="btn-ghost" :disabled="!settings.soul.exportDirectoryConfigured" @click="clearSoulExportDirectory">
+                Clear
+              </button>
+            </div>
+          </div>
+          <p class="mt-3 text-xs text-neutral-500">
+            Status:
+            <span class="font-medium text-neutral-700">
+              {{ settings.soul.exportDirectoryConfigured ? 'directory configured' : 'not configured' }}
+            </span>
+          </p>
         </div>
 
         <div class="mt-4">

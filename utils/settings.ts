@@ -5,6 +5,7 @@ const STORAGE_KEY = 'copycat:settings:v1'
 
 const DEFAULT_SOUL_SETTINGS: SoulSettings = {
   enabled: false,
+  exportDirectoryConfigured: false,
   learningEnabled: true,
   text: '',
 }
@@ -59,6 +60,7 @@ export const DEFAULT_SETTINGS: Settings = {
   systemPrompt: DEFAULT_SYSTEM_PROMPT,
   soul: {
     enabled: DEFAULT_SOUL_SETTINGS.enabled,
+    exportDirectoryConfigured: DEFAULT_SOUL_SETTINGS.exportDirectoryConfigured,
     learningEnabled: DEFAULT_SOUL_SETTINGS.learningEnabled,
     text: DEFAULT_SOUL_SETTINGS.text,
   },
@@ -136,6 +138,7 @@ export function buildDevSettingsOverride(): Partial<Settings> | null {
   if (soulEnabled !== undefined || soulLearningEnabled !== undefined || soulText.length > 0) {
     next.soul = {
       enabled: soulEnabled ?? DEFAULT_SOUL_SETTINGS.enabled,
+      exportDirectoryConfigured: DEFAULT_SOUL_SETTINGS.exportDirectoryConfigured,
       learningEnabled: soulLearningEnabled ?? DEFAULT_SOUL_SETTINGS.learningEnabled,
       text: soulText,
     }
@@ -285,6 +288,9 @@ function normalizeSoulSettings(value: unknown): SoulSettings {
   const raw = value as Partial<SoulSettings>
   return {
     enabled: typeof raw.enabled === 'boolean' ? raw.enabled : DEFAULT_SOUL_SETTINGS.enabled,
+    exportDirectoryConfigured: typeof raw.exportDirectoryConfigured === 'boolean'
+      ? raw.exportDirectoryConfigured
+      : DEFAULT_SOUL_SETTINGS.exportDirectoryConfigured,
     learningEnabled: typeof raw.learningEnabled === 'boolean'
       ? raw.learningEnabled
       : DEFAULT_SOUL_SETTINGS.learningEnabled,

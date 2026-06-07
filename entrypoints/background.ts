@@ -9,6 +9,7 @@ import type {
   KnowledgeImportRequest,
   KnowledgeImportResult,
   RuntimeMessage,
+  SoulLearningLogEntry,
 } from '~/types'
 import {
   deleteKnowledgeDocument,
@@ -17,14 +18,17 @@ import {
   searchKnowledgeChunks,
 } from '~/knowledge'
 import {
+  appendSoulLearningLogToConfiguredDirectory,
   runSoulLearning,
+  summarizeSoulLearningEvents,
+  syncSoulMarkdownToConfiguredDirectory,
   shouldRunSoulLearning,
 } from '~/soul'
 import {
   createBackgroundCompletionService,
 } from '~/utils/completion/background'
 import { openSettingsPage } from '~/utils/runtime'
-import { loadSettings, saveSettings } from '~/utils/settings'
+import { loadSettings, onSettingsChanged, saveSettings } from '~/utils/settings'
 import {
   getCompletionEventStats,
   listRecentCompletionEvents,
@@ -68,6 +72,12 @@ export default defineBackground(() => {
     if (details.reason === 'install') {
       void openSettingsPage()
     }
+  })
+
+  onSettingsChanged((settings) => {
+    void syncSoulMarkdownToConfiguredDirectory(settings.soul.text).catch((error: unknown) => {
+      console.warn('[copycat] failed to sync Soul markdown after settings change', error)
+    })
   })
 
   chrome.alarms.onAlarm.addListener((alarm) => {
@@ -145,6 +155,20 @@ export default defineBackground(() => {
       case 'completion/events/stats':
         void getCompletionEventStats(message.payload.host)
           .then((result: CompletionEventStats) => sendResponse({ ok: true, data: result }))
+          .catch((error: unknown) => {
+            sendResponse({
+              ok: false,
+              error: {
+                error: error instanceof Error ? error.message : String(error),
+              },
+            })
+          })
+        return true
+
+      case 'soul/export/sync':
+        void loadSettings()
+          .then(settings => syncSoulMarkdownToConfiguredDirectory(settings.soul.text))
+          .then(result => sendResponse({ ok: true, data: result }))
           .catch((error: unknown) => {
             sendResponse({
               ok: false,
@@ -247,10 +271,13 @@ export default defineBackground(() => {
 
     const events = await listRecentCompletionEvents(soulLearningWindowSize)
     const now = Date.now()
+    const previousRunAt = lastSoulLearningRunAt
+    const sampleSummary = summarizeSoulLearningEvents(events)
+    const freshEventCount = events.filter(event => event.timestamp > previousRunAt).length
     if (!shouldRunSoulLearning({
       cooldownMs: soulLearningCooldownMs,
       events,
-      lastRunAt: lastSoulLearningRunAt,
+      lastRunAt: previousRunAt,
       now,
     })) {
       return
@@ -263,14 +290,31 @@ export default defineBackground(() => {
       settings,
     })
       .then(async (result) => {
-        if (result?.shouldUpdate !== true) {
+        if (result === null) {
           return
         }
-        await saveSettings({
-          soul: {
-            text: result.nextSoulText,
-          },
-        })
+
+        if (result.shouldUpdate === true) {
+          await saveSettings({
+            soul: {
+              text: result.nextSoulText,
+            },
+          })
+        }
+
+        const logEntry: SoulLearningLogEntry = {
+          acceptedCount: sampleSummary.acceptedCount,
+          droppedCounts: sampleSummary.droppedCounts,
+          freshEventCount,
+          reason: result.reason,
+          rejectedCount: sampleSummary.rejectedCount,
+          selectedEventCount: sampleSummary.selectedEventCount,
+          timestamp: new Date(now).toISOString(),
+          trigger: 'accepted_rejected_threshold',
+          updated: result.shouldUpdate,
+        }
+
+        await appendSoulLearningLogToConfiguredDirectory(logEntry)
       })
       .catch((error: unknown) => {
         console.warn('[copycat] failed to run Soul learning', error)

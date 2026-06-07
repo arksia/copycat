@@ -1,4 +1,8 @@
-import type { CompletionEvent, Settings } from '~/types'
+import type {
+  CompletionEvent,
+  Settings,
+  SoulLearningDroppedCounts,
+} from '~/types'
 import { buildChatCompletionBody } from '~/utils/completion/client'
 import {
   buildOpenAICompatibleHeaders,
@@ -31,6 +35,14 @@ export interface SoulLearningResponse {
   reason: string
 }
 
+export interface SoulLearningSampleSummary {
+  acceptedCount: number
+  droppedCounts: SoulLearningDroppedCounts
+  rejectedCount: number
+  selectedEventCount: number
+  selectedEvents: CompletionEvent[]
+}
+
 export interface RunSoulLearningArgs {
   currentSoulText: string
   events: CompletionEvent[]
@@ -57,12 +69,12 @@ export function buildSoulLearningPrompt(args: {
   currentSoulText: string
   events: CompletionEvent[]
 }): string {
-  const events = selectSoulLearningEvents(args.events)
-  const acceptedEvents = events
+  const summary = summarizeSoulLearningEvents(args.events)
+  const acceptedEvents = summary.selectedEvents
     .filter(event => event.action === 'accepted')
     .map(formatSoulLearningEvent)
     .join('\n')
-  const rejectedEvents = events
+  const rejectedEvents = summary.selectedEvents
     .filter(event => event.action === 'rejected')
     .map(formatSoulLearningEvent)
     .join('\n')
@@ -183,14 +195,20 @@ function formatSoulLearningEvent(event: CompletionEvent): string {
   })
 }
 
-function selectSoulLearningEvents(events: CompletionEvent[]): CompletionEvent[] {
+export function summarizeSoulLearningEvents(events: CompletionEvent[]): SoulLearningSampleSummary {
   const selected: CompletionEvent[] = []
   const seen = new Set<string>()
+  const droppedCounts: SoulLearningDroppedCounts = {
+    actionBucketFull: 0,
+    duplicate: 0,
+    windowLimit: 0,
+  }
   let acceptedCount = 0
   let rejectedCount = 0
 
   for (const event of events) {
     if (selected.length >= SOUL_LEARNING_MAX_EVENTS) {
+      droppedCounts.windowLimit += 1
       break
     }
 
@@ -202,11 +220,13 @@ function selectSoulLearningEvents(events: CompletionEvent[]): CompletionEvent[] 
     ].join('\u0000')
 
     if (seen.has(signature)) {
+      droppedCounts.duplicate += 1
       continue
     }
 
     if (event.action === 'accepted') {
       if (acceptedCount >= SOUL_LEARNING_MAX_EVENTS_PER_ACTION) {
+        droppedCounts.actionBucketFull += 1
         continue
       }
       acceptedCount += 1
@@ -214,6 +234,7 @@ function selectSoulLearningEvents(events: CompletionEvent[]): CompletionEvent[] 
 
     if (event.action === 'rejected') {
       if (rejectedCount >= SOUL_LEARNING_MAX_EVENTS_PER_ACTION) {
+        droppedCounts.actionBucketFull += 1
         continue
       }
       rejectedCount += 1
@@ -223,7 +244,13 @@ function selectSoulLearningEvents(events: CompletionEvent[]): CompletionEvent[] 
     selected.push(event)
   }
 
-  return selected.reverse()
+  return {
+    acceptedCount,
+    droppedCounts,
+    rejectedCount,
+    selectedEventCount: selected.length,
+    selectedEvents: selected.reverse(),
+  }
 }
 
 function truncateForPrompt(value: string): string {

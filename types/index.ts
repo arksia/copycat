@@ -6,8 +6,34 @@ export type ThinkingControlMode
 
 export interface SoulSettings {
   enabled: boolean
+  exportDirectoryConfigured: boolean
   learningEnabled: boolean
   text: string
+}
+
+export interface SoulLearningDroppedCounts {
+  actionBucketFull: number
+  duplicate: number
+  windowLimit: number
+}
+
+export interface SoulLearningLogEntry {
+  acceptedCount: number
+  droppedCounts: SoulLearningDroppedCounts
+  freshEventCount: number
+  reason: string
+  rejectedCount: number
+  selectedEventCount: number
+  timestamp: string
+  trigger: 'accepted_rejected_threshold'
+  updated: boolean
+}
+
+export interface SoulExportSyncResult {
+  exportDirectoryConfigured: boolean
+  permissionGranted: boolean
+  wroteLog: boolean
+  wroteSoul: boolean
 }
 
 export interface SoulBudgetMeta {
@@ -31,6 +57,7 @@ export interface SoulProjectionInput {
 export interface SettingsPatch extends Partial<Omit<Settings, 'soul'>> {
   soul?: Partial<{
     enabled: boolean
+    exportDirectoryConfigured: boolean
     learningEnabled: boolean
     text: string
   }>
@@ -217,6 +244,7 @@ export type RuntimeMessage
     | { type: 'knowledge/import', payload: KnowledgeImportRequest }
     | { type: 'knowledge/list', payload: { kbId: string } }
     | { type: 'knowledge/search', payload: KnowledgeSearchRequest }
+    | { type: 'soul/export/sync' }
     | { type: 'settings/get' }
     | { type: 'settings/set', payload: SettingsPatch }
 

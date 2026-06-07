@@ -25,6 +25,7 @@ const baseSettings: Settings = {
   systemPrompt: 'test',
   soul: {
     enabled: false,
+    exportDirectoryConfigured: false,
     learningEnabled: true,
     text: '',
   },
@@ -122,6 +123,7 @@ describe('normalizeSettingsShape', () => {
     expect(normalizeSettingsShape(invalidSettings)).toMatchObject({
       soul: {
         enabled: false,
+        exportDirectoryConfigured: false,
         learningEnabled: true,
         text: 'builder\nconcise',
       },
@@ -147,6 +149,7 @@ describe('normalizeSettingsShape', () => {
     expect(normalizeSettingsShape(legacySettings)).toMatchObject({
       soul: {
         enabled: true,
+        exportDirectoryConfigured: false,
         learningEnabled: false,
         text: 'builder\nconcise\ncopycat, soul',
       },
@@ -242,6 +245,7 @@ describe('loadSettings', () => {
 
     expect(settings.soul).toEqual({
       enabled: true,
+      exportDirectoryConfigured: false,
       learningEnabled: true,
       text: 'A pragmatic extension engineer.\nLead with the smallest workable implementation.',
     })
@@ -278,6 +282,7 @@ describe('saveSettings', () => {
 
     expect(saved.soul).toEqual({
       enabled: true,
+      exportDirectoryConfigured: false,
       learningEnabled: false,
       text: 'builder\nconcise',
     })

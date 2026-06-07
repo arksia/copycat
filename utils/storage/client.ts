@@ -64,6 +64,12 @@ export async function openCopycatDb(): Promise<IDBDatabase> {
         knowledgeChunks.createIndex(DB_INDEXES.knowledgeChunksByDocument, 'docId')
         knowledgeChunks.createIndex(DB_INDEXES.knowledgeChunksByKnowledgeBase, 'kbId')
       }
+
+      if (!db.objectStoreNames.contains(DB_STORES.soulExportHandles)) {
+        db.createObjectStore(DB_STORES.soulExportHandles, {
+          keyPath: 'id',
+        })
+      }
     }
 
     request.onsuccess = () => {
