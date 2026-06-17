@@ -14,3 +14,9 @@ export {
 } from './learning'
 export { buildPinnedSoulBlocks } from './profile'
 export { buildSoulContext, buildSoulProjection } from './prompt'
+export { createSoulRuntime } from './runtime'
+export type {
+  SoulRuntime,
+  SoulRuntimeDeps,
+  SoulRuntimeOptions,
+} from './runtime'

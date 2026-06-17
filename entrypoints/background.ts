@@ -9,7 +9,6 @@ import type {
   KnowledgeImportRequest,
   KnowledgeImportResult,
   RuntimeMessage,
-  SoulLearningLogEntry,
 } from '~/types'
 import {
   deleteKnowledgeDocument,
@@ -17,13 +16,7 @@ import {
   listKnowledgeDocuments,
   searchKnowledgeChunks,
 } from '~/knowledge'
-import {
-  appendSoulLearningLogToConfiguredDirectory,
-  runSoulLearning,
-  summarizeSoulLearningEvents,
-  syncSoulMarkdownToConfiguredDirectory,
-  shouldRunSoulLearning,
-} from '~/soul'
+import { createSoulRuntime } from '~/soul'
 import {
   createBackgroundCompletionService,
 } from '~/utils/completion/background'
@@ -37,19 +30,13 @@ import {
 } from '~/utils/storage/repositories/events'
 
 export default defineBackground(() => {
-  const soulLearningAlarmName = 'copycat:soul-learning'
   const defaultKnowledgeBaseId = 'default'
   const knowledgeContextMaxChars = 900
   const knowledgeTopK = 2
   const knowledgeDocumentTopK = 3
   const semanticQueryCacheTtlMs = 30_000
   const telemetryWindowSize = 20
-  const soulLearningIdleDelayMinutes = 3
-  const soulLearningCooldownMs = 30 * 60 * 1000
-  const soulLearningWindowSize = 24
   let creatingOffscreenDocument: Promise<void> | null = null
-  let lastSoulLearningRunAt = 0
-  let runningSoulLearning: Promise<void> | null = null
   const semanticQueryEmbeddingCache = new Map<string, {
     expiresAt: number
     result: {
@@ -67,6 +54,16 @@ export default defineBackground(() => {
     telemetryWindowSize,
     resolveSemanticQueryEmbedding,
   })
+  const soulRuntime = createSoulRuntime({
+    createAlarm: (name, options) => chrome.alarms.create(name, options),
+    listRecentCompletionEvents,
+    loadSettings,
+    saveSoulText: text => saveSettings({
+      soul: {
+        text,
+      },
+    }),
+  })
 
   chrome.runtime.onInstalled.addListener((details) => {
     if (details.reason === 'install') {
@@ -75,16 +72,16 @@ export default defineBackground(() => {
   })
 
   onSettingsChanged((settings) => {
-    void syncSoulMarkdownToConfiguredDirectory(settings.soul.text).catch((error: unknown) => {
+    void soulRuntime.syncExportedSoulText(settings).catch((error: unknown) => {
       console.warn('[copycat] failed to sync Soul markdown after settings change', error)
     })
   })
 
   chrome.alarms.onAlarm.addListener((alarm) => {
-    if (alarm.name !== soulLearningAlarmName) {
+    if (alarm.name !== soulRuntime.alarmName) {
       return
     }
-    void maybeRunSoulLearning().catch((error: unknown) => {
+    void soulRuntime.handleLearningAlarm().catch((error: unknown) => {
       console.warn('[copycat] failed to run scheduled Soul learning', error)
     })
   })
@@ -135,7 +132,7 @@ export default defineBackground(() => {
         return true
 
       case 'completion/event':
-        void persistCompletionEventAndMaybeLearn(message.payload)
+        void persistCompletionEventAndNotifySoul(message.payload)
         sendResponse({ ok: true })
         return false
 
@@ -166,8 +163,7 @@ export default defineBackground(() => {
         return true
 
       case 'soul/export/sync':
-        void loadSettings()
-          .then(settings => syncSoulMarkdownToConfiguredDirectory(settings.soul.text))
+        void soulRuntime.syncExportedSoul()
           .then(result => sendResponse({ ok: true, data: result }))
           .catch((error: unknown) => {
             sendResponse({
@@ -234,7 +230,7 @@ export default defineBackground(() => {
     return false
   })
 
-  async function persistCompletionEventAndMaybeLearn(event: CompletionEvent): Promise<void> {
+  async function persistCompletionEventAndNotifySoul(event: CompletionEvent): Promise<void> {
     try {
       await putCompletionEvent(event)
     }
@@ -243,87 +239,9 @@ export default defineBackground(() => {
       return
     }
 
-    await scheduleSoulLearning().catch((error: unknown) => {
+    await soulRuntime.handleCompletionEventPersisted().catch((error: unknown) => {
       console.warn('[copycat] failed to schedule Soul learning', error)
     })
-  }
-
-  async function scheduleSoulLearning(): Promise<void> {
-    const settings = await loadSettings()
-    if (!settings.soul.learningEnabled || !settings.baseUrl || !settings.model) {
-      return
-    }
-
-    await chrome.alarms.create(soulLearningAlarmName, {
-      delayInMinutes: soulLearningIdleDelayMinutes,
-    })
-  }
-
-  async function maybeRunSoulLearning(): Promise<void> {
-    if (runningSoulLearning !== null) {
-      return
-    }
-
-    const settings = await loadSettings()
-    if (!settings.soul.learningEnabled || !settings.baseUrl || !settings.model) {
-      return
-    }
-
-    const events = await listRecentCompletionEvents(soulLearningWindowSize)
-    const now = Date.now()
-    const previousRunAt = lastSoulLearningRunAt
-    const sampleSummary = summarizeSoulLearningEvents(events)
-    const freshEventCount = events.filter(event => event.timestamp > previousRunAt).length
-    if (!shouldRunSoulLearning({
-      cooldownMs: soulLearningCooldownMs,
-      events,
-      lastRunAt: previousRunAt,
-      now,
-    })) {
-      return
-    }
-
-    lastSoulLearningRunAt = now
-    runningSoulLearning = runSoulLearning({
-      currentSoulText: settings.soul.text,
-      events,
-      settings,
-    })
-      .then(async (result) => {
-        if (result === null) {
-          return
-        }
-
-        if (result.shouldUpdate === true) {
-          await saveSettings({
-            soul: {
-              text: result.nextSoulText,
-            },
-          })
-        }
-
-        const logEntry: SoulLearningLogEntry = {
-          acceptedCount: sampleSummary.acceptedCount,
-          droppedCounts: sampleSummary.droppedCounts,
-          freshEventCount,
-          reason: result.reason,
-          rejectedCount: sampleSummary.rejectedCount,
-          selectedEventCount: sampleSummary.selectedEventCount,
-          timestamp: new Date(now).toISOString(),
-          trigger: 'accepted_rejected_threshold',
-          updated: result.shouldUpdate,
-        }
-
-        await appendSoulLearningLogToConfiguredDirectory(logEntry)
-      })
-      .catch((error: unknown) => {
-        console.warn('[copycat] failed to run Soul learning', error)
-      })
-      .finally(() => {
-        runningSoulLearning = null
-      })
-
-    await runningSoulLearning
   }
 
   async function handleKnowledgeDelete(args: {
