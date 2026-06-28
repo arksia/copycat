@@ -1,9 +1,9 @@
 /**
  * Editor adapters abstract the quirks of different input surfaces.
  *
- * M1 explicitly optimizes around native text inputs. The resolver registry
- * keeps room for future adapters such as ProseMirror or richer
- * contenteditable-specific rendering without changing the content script flow.
+ * Native text inputs stay the most precise path. Plain contenteditable hosts
+ * use a conservative adapter so common custom chat boxes can share the same
+ * content script flow without site-specific selectors.
  */
 
 export type EditorKind = 'textarea' | 'input' | 'contenteditable'
@@ -50,6 +50,19 @@ export const EDITOR_RESOLVERS: readonly EditorResolver[] = [
       return null
     },
   },
+  {
+    name: 'contenteditable',
+    supports(target) {
+      return target instanceof HTMLElement && findContentEditableHost(target) !== null
+    },
+    resolve(target) {
+      if (!(target instanceof HTMLElement)) {
+        return null
+      }
+      const host = findContentEditableHost(target)
+      return host ? new ContentEditableAdapter(host) : null
+    },
+  },
 ] as const
 
 export function resolveEditor(target: EventTarget | null): EditorHandle | null {
@@ -63,24 +76,6 @@ export function resolveEditor(target: EventTarget | null): EditorHandle | null {
   return null
 }
 
-// Keep future adapters explicit, but do not activate them in M1. The current
-// milestone is focused on making native text inputs reliable first.
-export const FUTURE_EDITOR_RESOLVERS: readonly EditorResolver[] = [
-  {
-    name: 'contenteditable',
-    supports(target) {
-      return target instanceof HTMLElement && target.isContentEditable
-    },
-    resolve(target) {
-      if (!(target instanceof HTMLElement) || !target.isContentEditable) {
-        return null
-      }
-      const host = findContentEditableHost(target)
-      return host ? new ContentEditableAdapter(host) : null
-    },
-  },
-] as const
-
 function isTextualInput(el: HTMLInputElement): boolean {
   const t = (el.type || 'text').toLowerCase()
   return ['text', 'search', 'url', 'email', 'tel'].includes(t)
@@ -89,8 +84,11 @@ function isTextualInput(el: HTMLInputElement): boolean {
 function findContentEditableHost(start: HTMLElement): HTMLElement | null {
   let el: HTMLElement | null = start
   while (el) {
-    if (el.getAttribute?.('contenteditable') === 'true')
+    const value = (el.getAttribute('contenteditable') ?? '').toLowerCase()
+    if (value === 'true' || value === 'plaintext-only')
       return el
+    if (value === 'false')
+      return null
     el = el.parentElement
   }
   return null
@@ -297,6 +295,8 @@ class ContentEditableAdapter implements EditorHandle {
     const sel = window.getSelection()
     if (!sel || sel.rangeCount === 0)
       return null
+    if (!sel.isCollapsed)
+      return null
     const range = sel.getRangeAt(0)
     if (!this.el.contains(range.startContainer))
       return null
@@ -306,21 +306,15 @@ class ContentEditableAdapter implements EditorHandle {
   getPrefix(): string {
     const range = this.currentRange()
     if (!range)
-      return this.el.textContent ?? ''
-    const pre = range.cloneRange()
-    pre.selectNodeContents(this.el)
-    pre.setEnd(range.startContainer, range.startOffset)
-    return pre.toString()
+      return ''
+    return getContentEditablePrefix(this.el, range)
   }
 
   getSuffix(): string {
     const range = this.currentRange()
     if (!range)
       return ''
-    const post = range.cloneRange()
-    post.selectNodeContents(this.el)
-    post.setStart(range.endContainer, range.endOffset)
-    return post.toString()
+    return getContentEditableSuffix(this.el, range)
   }
 
   getCaretRect(): DOMRect | null {
@@ -335,47 +329,30 @@ class ContentEditableAdapter implements EditorHandle {
   }
 
   insertAtCaret(text: string): void {
-    this.el.focus()
-    const sel = window.getSelection()
-    if (!sel || sel.rangeCount === 0) {
-      this.el.textContent = (this.el.textContent ?? '') + text
-      this.el.dispatchEvent(new InputEvent('input', { bubbles: true, data: text, inputType: 'insertText' }))
+    const currentRange = this.currentRange()
+    if (!currentRange) {
       return
     }
+    const range = currentRange.cloneRange()
+    this.el.focus()
 
-    // Prefer the modern API; falls back to execCommand for old browsers.
-    let inserted = false
-    try {
-      const event = new InputEvent('beforeinput', {
-        bubbles: true,
-        cancelable: true,
-        data: text,
-        inputType: 'insertText',
-      })
-      this.el.dispatchEvent(event)
-      if (!event.defaultPrevented) {
-        const range = sel.getRangeAt(0)
-        range.deleteContents()
-        const node = document.createTextNode(text)
-        range.insertNode(node)
-        range.setStartAfter(node)
-        range.setEndAfter(node)
-        sel.removeAllRanges()
-        sel.addRange(range)
-        inserted = true
-      }
-    }
-    catch {
-      // fall through
+    const beforeInput = createTextInputEvent('beforeinput', text, true)
+    this.el.dispatchEvent(beforeInput)
+
+    if (!beforeInput.defaultPrevented) {
+      const sel = window.getSelection()
+      if (!sel)
+        return
+      range.deleteContents()
+      const node = document.createTextNode(text)
+      range.insertNode(node)
+      range.setStartAfter(node)
+      range.setEndAfter(node)
+      sel.removeAllRanges()
+      sel.addRange(range)
     }
 
-    if (!inserted) {
-      document.execCommand?.('insertText', false, text)
-    }
-
-    this.el.dispatchEvent(
-      new InputEvent('input', { bubbles: true, data: text, inputType: 'insertText' }),
-    )
+    this.el.dispatchEvent(createTextInputEvent('input', text, false))
   }
 
   focus(): void {
@@ -385,5 +362,39 @@ class ContentEditableAdapter implements EditorHandle {
   isEmpty(): boolean {
     const txt = this.el.textContent ?? ''
     return txt.replace(/\s+/g, '') === ''
+  }
+}
+
+function getContentEditablePrefix(host: HTMLElement, range: Range): string {
+  const pre = range.cloneRange()
+  pre.selectNodeContents(host)
+  pre.setEnd(range.startContainer, range.startOffset)
+  // TODO: Replace Range.toString() with a contenteditable DOM serializer that preserves visible line breaks before broad site support.
+  return pre.toString()
+}
+
+function getContentEditableSuffix(host: HTMLElement, range: Range): string {
+  const post = range.cloneRange()
+  post.selectNodeContents(host)
+  post.setStart(range.endContainer, range.endOffset)
+  // TODO: Replace Range.toString() with a contenteditable DOM serializer that preserves visible line breaks before broad site support.
+  return post.toString()
+}
+
+function createTextInputEvent(
+  type: 'beforeinput' | 'input',
+  text: string,
+  cancelable: boolean,
+): Event {
+  try {
+    return new InputEvent(type, {
+      bubbles: true,
+      cancelable,
+      data: text,
+      inputType: 'insertText',
+    })
+  }
+  catch {
+    return new Event(type, { bubbles: true, cancelable })
   }
 }
