@@ -207,12 +207,12 @@ export function reduceCompletionState(
         }],
         state: {
           ...state,
-          mode: 'requestingFast',
+          mode: 'requesting',
         },
       }
     }
 
-    case 'FAST_REQUEST_STARTED': {
+    case 'REQUEST_STARTED': {
       if (!state.session || state.session.sessionId !== event.sessionId) {
         return { effects: [], state }
       }
@@ -220,23 +220,64 @@ export function reduceCompletionState(
         effects: [],
         state: {
           ...state,
-          mode: 'requestingFast',
+          mode: 'requesting',
           session: {
             ...state.session,
             requestId: event.requestId,
-            stage: 'fast',
+            stage: event.stage,
           },
         },
       }
     }
 
-    case 'FAST_REQUEST_RESOLVED': {
+    case 'REQUEST_RESOLVED': {
       if (
         !state.session
         || state.session.sessionId !== event.sessionId
         || state.session.requestId !== event.requestId
       ) {
         return { effects: [], state }
+      }
+
+      if (event.stage === 'enhanced') {
+        if (!shouldPreferEnhancedCompletion(state.session.suggestion, event.suggestion)) {
+          return {
+            effects: [],
+            state: {
+              ...state,
+              mode: state.session.suggestion ? 'showing' : 'idle',
+              session: {
+                ...state.session,
+                requestId: null,
+              },
+            },
+          }
+        }
+
+        const nextSession: CompletionSession = {
+          ...state.session,
+          latencyMs: event.latencyMs,
+          originalSuggestion: event.originalSuggestion,
+          requestId: null,
+          stage: 'enhanced',
+          suggestion: event.suggestion,
+        }
+
+        return {
+          effects: [{
+            latencyMs: event.latencyMs,
+            originalSuggestion: event.originalSuggestion,
+            sessionId: state.session.sessionId,
+            stage: 'enhanced',
+            suggestion: event.suggestion,
+            type: 'SHOW_SUGGESTION',
+          }],
+          state: {
+            ...state,
+            mode: 'showing',
+            session: nextSession,
+          },
+        }
       }
 
       const nextSession: CompletionSession = {
@@ -261,7 +302,6 @@ export function reduceCompletionState(
       }
       if (event.shouldRunEnhancedStage) {
         effects.push({
-          currentSuggestion: event.originalSuggestion,
           sessionId: state.session.sessionId,
           stage: 'enhanced',
           type: 'REQUEST_COMPLETION',
@@ -272,75 +312,8 @@ export function reduceCompletionState(
         effects,
         state: {
           ...state,
-          mode: event.suggestion ? 'showingFast' : 'idle',
+          mode: event.suggestion ? 'showing' : 'idle',
           session: event.suggestion ? nextSession : null,
-        },
-      }
-    }
-
-    case 'ENHANCED_REQUEST_STARTED': {
-      if (!state.session || state.session.sessionId !== event.sessionId) {
-        return { effects: [], state }
-      }
-      return {
-        effects: [],
-        state: {
-          ...state,
-          mode: 'requestingEnhanced',
-          session: {
-            ...state.session,
-            requestId: event.requestId,
-            stage: 'enhanced',
-          },
-        },
-      }
-    }
-
-    case 'ENHANCED_REQUEST_RESOLVED': {
-      if (
-        !state.session
-        || state.session.sessionId !== event.sessionId
-        || state.session.requestId !== event.requestId
-      ) {
-        return { effects: [], state }
-      }
-
-      if (!shouldPreferEnhancedCompletion(state.session.suggestion, event.suggestion)) {
-        return {
-          effects: [],
-          state: {
-            ...state,
-            mode: state.session.suggestion ? 'showingFast' : 'idle',
-            session: {
-              ...state.session,
-              requestId: null,
-            },
-          },
-        }
-      }
-
-      const nextSession: CompletionSession = {
-        ...state.session,
-        latencyMs: event.latencyMs,
-        originalSuggestion: event.originalSuggestion,
-        requestId: null,
-        stage: 'enhanced',
-        suggestion: event.suggestion,
-      }
-
-      return {
-        effects: [{
-          latencyMs: event.latencyMs,
-          originalSuggestion: event.originalSuggestion,
-          sessionId: state.session.sessionId,
-          stage: 'enhanced',
-          suggestion: event.suggestion,
-          type: 'SHOW_SUGGESTION',
-        }],
-        state: {
-          ...state,
-          mode: 'showingEnhanced',
-          session: nextSession,
         },
       }
     }

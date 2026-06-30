@@ -50,7 +50,7 @@ describe('reduceCompletionState', () => {
 
   it('blocks and clears an existing session when the snapshot becomes ineligible', () => {
     const state = buildState({
-      mode: 'showingFast',
+      mode: 'showing',
       snapshot: buildSnapshot(),
       session: {
         fingerprint: 'fp-1',
@@ -141,7 +141,7 @@ describe('reduceCompletionState', () => {
       type: 'DEBOUNCE_ELAPSED',
     })
 
-    expect(result.state.mode).toBe('requestingFast')
+    expect(result.state.mode).toBe('requesting')
     expect(result.effects).toEqual([
       {
         sessionId: 'sess_1',
@@ -151,9 +151,96 @@ describe('reduceCompletionState', () => {
     ])
   })
 
+  it('keeps staged behavior when a fast response asks for enhanced follow-up', () => {
+    const state = buildState({
+      mode: 'requesting',
+      snapshot: buildSnapshot(),
+      session: {
+        fingerprint: 'fp-1',
+        latencyMs: null,
+        originalSuggestion: '',
+        requestId: 'req-1',
+        sessionId: 'sess_1',
+        snapshotRevision: 1,
+        stage: 'fast',
+        suggestion: '',
+      },
+    })
+
+    const result = reduceCompletionState(state, {
+      latencyMs: 120,
+      originalSuggestion: ' world',
+      requestId: 'req-1',
+      sessionId: 'sess_1',
+      shouldRunEnhancedStage: true,
+      stage: 'fast',
+      suggestion: ' world',
+      type: 'REQUEST_RESOLVED',
+    })
+
+    expect(result.state.mode).toBe('showing')
+    expect(result.state.session?.stage).toBe('fast')
+    expect(result.effects).toEqual([
+      {
+        latencyMs: 120,
+        originalSuggestion: ' world',
+        sessionId: 'sess_1',
+        stage: 'fast',
+        suggestion: ' world',
+        type: 'SHOW_SUGGESTION',
+      },
+      {
+        sessionId: 'sess_1',
+        stage: 'enhanced',
+        type: 'REQUEST_COMPLETION',
+      },
+    ])
+  })
+
+  it('replaces the shown fast suggestion when enhanced returns a better completion', () => {
+    const state = buildState({
+      mode: 'requesting',
+      snapshot: buildSnapshot(),
+      session: {
+        fingerprint: 'fp-1',
+        latencyMs: 120,
+        originalSuggestion: ' world',
+        requestId: 'req-2',
+        sessionId: 'sess_1',
+        snapshotRevision: 1,
+        stage: 'enhanced',
+        suggestion: ' world',
+      },
+    })
+
+    const result = reduceCompletionState(state, {
+      latencyMs: 180,
+      originalSuggestion: ' wonderful world',
+      requestId: 'req-2',
+      sessionId: 'sess_1',
+      stage: 'enhanced',
+      suggestion: ' wonderful world',
+      type: 'REQUEST_RESOLVED',
+    })
+
+    expect(result.state.mode).toBe('showing')
+    expect(result.state.session?.stage).toBe('enhanced')
+    expect(result.state.session?.suggestion).toBe(' wonderful world')
+    expect(result.effects).toEqual([
+      {
+        latencyMs: 180,
+        originalSuggestion: ' wonderful world',
+        sessionId: 'sess_1',
+        stage: 'enhanced',
+        suggestion: ' wonderful world',
+        type: 'SHOW_SUGGESTION',
+      },
+    ])
+  })
+
   it('moves to blocked and clears the session when composition starts', () => {
     const state = buildState({
-      mode: 'showingFast',
+      mode: 'showing',
       snapshot: buildSnapshot(),
       session: {
         fingerprint: 'fp-1',
@@ -193,7 +280,7 @@ describe('reduceCompletionState', () => {
 
   it('returns to idle and clears the session when the editor deactivates', () => {
     const state = buildState({
-      mode: 'showingFast',
+      mode: 'showing',
       snapshot: buildSnapshot(),
       session: {
         fingerprint: 'fp-1',
@@ -275,7 +362,7 @@ describe('reduceCompletionState', () => {
 
   it('clears an existing shown suggestion when a new request is suppressed locally', () => {
     const state = buildState({
-      mode: 'showingFast',
+      mode: 'showing',
       snapshot: buildSnapshot(),
       session: {
         fingerprint: 'fp-1',

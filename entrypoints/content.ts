@@ -328,7 +328,8 @@ class CopycatFlowController {
           this.controller.dispatch({
             requestId,
             sessionId: effect.sessionId,
-            type: effect.stage === 'fast' ? 'FAST_REQUEST_STARTED' : 'ENHANCED_REQUEST_STARTED',
+            stage: effect.stage,
+            type: 'REQUEST_STARTED',
           })
           const req: CompletionRequest = {
             id: requestId,
@@ -342,24 +343,16 @@ class CopycatFlowController {
               type: 'completion/request',
               payload: req,
             })
-            this.controller.dispatch(effect.stage === 'fast'
-              ? {
-                  latencyMs: res.latencyMs,
-                  originalSuggestion: res.completion,
-                  requestId,
-                  sessionId: effect.sessionId,
-                  shouldRunEnhancedStage: res.stage === 'fast' && res.shouldRunEnhancedStage,
-                  suggestion: res.completion,
-                  type: 'FAST_REQUEST_RESOLVED',
-                }
-              : {
-                  latencyMs: res.latencyMs,
-                  originalSuggestion: res.completion,
-                  requestId,
-                  sessionId: effect.sessionId,
-                  suggestion: res.completion,
-                  type: 'ENHANCED_REQUEST_RESOLVED',
-                })
+            this.controller.dispatch({
+              latencyMs: res.latencyMs,
+              originalSuggestion: res.completion,
+              requestId,
+              sessionId: effect.sessionId,
+              shouldRunEnhancedStage: res.stage === 'fast' && res.shouldRunEnhancedStage,
+              stage: effect.stage,
+              suggestion: res.completion,
+              type: 'REQUEST_RESOLVED',
+            })
             if (res.skipped) {
               this.triggerMemory.lastSkipPrefix = state.snapshot.prefix
               this.triggerMemory.lastSkipAt = Date.now()

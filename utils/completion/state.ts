@@ -1,11 +1,9 @@
 export type CompletionMode
   = | 'blocked'
     | 'idle'
-    | 'requestingEnhanced'
-    | 'requestingFast'
+    | 'requesting'
     | 'scheduled'
-    | 'showingEnhanced'
-    | 'showingFast'
+    | 'showing'
 
 export interface CompletionSnapshot {
   editorId: string
@@ -60,27 +58,16 @@ export type CompletionEvent
     | {
       requestId: string
       sessionId: string
-      type: 'FAST_REQUEST_STARTED'
-    }
-    | {
-      latencyMs: number
-      originalSuggestion: string
-      shouldRunEnhancedStage: boolean
-      suggestion: string
-      type: 'FAST_REQUEST_RESOLVED'
-      requestId: string
-      sessionId: string
-    }
-    | {
-      requestId: string
-      sessionId: string
-      type: 'ENHANCED_REQUEST_STARTED'
+      stage: 'enhanced' | 'fast'
+      type: 'REQUEST_STARTED'
     }
     | {
       latencyMs: number
       originalSuggestion: string
       suggestion: string
-      type: 'ENHANCED_REQUEST_RESOLVED'
+      shouldRunEnhancedStage?: boolean
+      stage: 'enhanced' | 'fast'
+      type: 'REQUEST_RESOLVED'
       requestId: string
       sessionId: string
     }
@@ -127,13 +114,7 @@ export type CompletionEffect
     }
     | {
       sessionId: string
-      stage: 'fast'
-      type: 'REQUEST_COMPLETION'
-    }
-    | {
-      currentSuggestion: string
-      sessionId: string
-      stage: 'enhanced'
+      stage: 'enhanced' | 'fast'
       type: 'REQUEST_COMPLETION'
     }
     | {
