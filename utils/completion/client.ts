@@ -62,9 +62,6 @@ interface ChatChoice {
   message?: {
     content?: string
   }
-  delta?: {
-    content?: string
-  }
 }
 
 interface ChatCompletionBody {
@@ -296,7 +293,7 @@ function truncate(s: string, n: number): string {
  * Extracts the assistant completion text from the first chat choice shape we support.
  *
  * Use when:
- * - consuming chat-completions style responses with either `message.content` or `delta.content`
+ * - consuming non-streaming chat-completions style responses with `message.content`
  *
  * Expects:
  * - `choice` to be the parsed first response choice when present
@@ -305,7 +302,7 @@ function truncate(s: string, n: number): string {
  * - the raw completion text
  */
 export function extractRawCompletion(choice?: ChatChoice): string {
-  return choice?.message?.content ?? choice?.delta?.content ?? ''
+  return choice?.message?.content ?? ''
 }
 
 export function normalizeCompletion(rawCompletion: string): {
